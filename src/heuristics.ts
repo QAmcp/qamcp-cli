@@ -49,9 +49,11 @@ export interface SimilarPair {
 }
 
 // Tools whose descriptions use mostly the same words. An AI picks tools from these
-// descriptions, so near-identical ones make it guess.
+// descriptions, so near-identical ones make it guess. A pair whose descriptions point to
+// each other ("to move a database, use delete_databases") already tells the AI which to
+// pick, so it is not reported.
 export function similarTools(tools: Tool[], threshold = 0.6): SimilarPair[] {
-  const sets = tools.map((t) => ({ name: t.name, words: new Set(contentWords(t.description ?? '')) }));
+  const sets = tools.map((t) => ({ name: t.name, desc: t.description ?? '', words: new Set(contentWords(t.description ?? '')) }));
   const pairs: SimilarPair[] = [];
   for (let i = 0; i < sets.length; i++)
     for (let j = i + 1; j < sets.length; j++) {
@@ -60,10 +62,26 @@ export function similarTools(tools: Tool[], threshold = 0.6): SimilarPair[] {
       if (a.size < 4 || b.size < 4) continue; // too short to compare fairly
       const shared = [...a].filter((w) => b.has(w)).length;
       const overlap = shared / (a.size + b.size - shared);
-      if (overlap >= threshold)
-        pairs.push({ a: sets[i].name, b: sets[j].name, overlap, onlyA: [...a].filter((w) => !b.has(w)), onlyB: [...b].filter((w) => !a.has(w)) });
+      if (overlap < threshold) continue;
+      if (mentionsTool(sets[i].desc, sets[j].name) || mentionsTool(sets[j].desc, sets[i].name)) continue;
+      // The words that are also in the tool names say the most, so they come first.
+      const named = new Set([...nameWords(sets[i].name), ...nameWords(sets[j].name)].map((w) => contentWords(w)[0] ?? w));
+      const first = (ws: string[]) => [...ws.filter((w) => named.has(w)), ...ws.filter((w) => !named.has(w))];
+      pairs.push({ a: sets[i].name, b: sets[j].name, overlap, onlyA: first([...a].filter((w) => !b.has(w))), onlyB: first([...b].filter((w) => !a.has(w))) });
     }
   return pairs.sort((x, y) => y.overlap - x.overlap);
+}
+
+// Does this description name the tool, with or without a shared prefix and in any
+// spelling ("notion-delete-databases" as "delete_databases" or "delete databases")?
+// One-word names don't count: a plain word like "search" is not a pointer to a tool.
+function mentionsTool(desc: string, name: string): boolean {
+  const words = nameWords(name);
+  for (let k = 0; k <= words.length - 2; k++) {
+    const tail = words.slice(k).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[-_. ]?');
+    if (new RegExp(`(^|[^a-z0-9])${tail}($|[^a-z0-9])`, 'i').test(desc)) return true;
+  }
+  return false;
 }
 
 // ---------- #6 claims success but returns nothing ----------

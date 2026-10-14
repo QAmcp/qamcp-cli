@@ -66,6 +66,23 @@ test('leaks: web links and normal words are not server paths', () => {
   assert.deepEqual(allMatches('Use the environment settings', INTERNAL_PATTERNS), []);
 });
 
+test('similar: descriptions that point to each other are not reported (real Notion case)', () => {
+  const pairs = similarTools([
+    tool('notion-delete-pages', 'Move Notion pages to Trash. They can be restored with the restore_pages tool or from Trash in Notion. Database rows are pages. To move a database to Trash, use delete_databases. Use this tool only when the user explicitly asks to delete specific pages.'),
+    tool('notion-delete-databases', 'Move Notion databases to Trash. They can be restored with the restore_pages tool or from Trash in Notion. Each database goes to Trash with all of its rows. To move a page or database row to Trash, use delete_pages. Use this tool only when the user explicitly asks to delete specific databases.'),
+  ]);
+  assert.equal(pairs.length, 0);
+});
+
+test('similar: the words from the tool names come first (real Notion case)', () => {
+  const [p] = similarTools([
+    tool('notion-list-private-pages', "List the current user's top-level pages and databases in their Private sidebar section. Use this to browse private workspace structure. For content searches, including keywords and titles, use search. Follow cursor pagination when the complete list is needed."),
+    tool('notion-list-shared-pages', "List pages and databases in the current user's Shared sidebar section. Use this to browse content shared directly with the user. For content searches, including keywords and titles, use search. Follow cursor pagination when the complete list is needed."),
+  ]);
+  assert.equal(p.onlyA[0], 'private');
+  assert.equal(p.onlyB[0], 'shared');
+});
+
 test('similar: names the words that tell the two tools apart (real Tandem case)', () => {
   const [p] = similarTools([
     tool('refresh_docs_index', 'Force-refresh docs indexes and report whether data came from the network, cache, or stale fallback.'),
