@@ -3,6 +3,7 @@
 //   crashcall   works, but the whole program dies when a tool is called
 //   needsenv    quits at once unless API_KEY is set, saying so on stderr (like most real servers)
 //   noisy       writes lots of logs on stderr (allowed), and works
+//   paths       its errors show paths on this computer (fine for a local program)
 import { Server } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 
@@ -22,6 +23,7 @@ server.setRequestHandler('tools/list', async () => ({
 server.setRequestHandler('tools/call', async (req) => {
   if (mode === 'crashcall') process.exit(3);
   const city = (req.params as any).arguments?.city;
+  if (mode === 'paths' && typeof city !== 'string') return { content: [{ type: 'text' as const, text: 'No such file: C:\\Users\\me\\project\\weather.json (also tried /home/me/project/weather.json)' }], isError: true };
   if (typeof city !== 'string') return { content: [{ type: 'text' as const, text: 'city is required and must be text' }], isError: true };
   return { content: [{ type: 'text' as const, text: `${city}: 21°C` }] };
 });

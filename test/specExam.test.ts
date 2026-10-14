@@ -46,7 +46,7 @@ test('names: spaces, too long and duplicates are flagged; dots and capitals are 
 });
 
 test('best: valid schemas (no inputs, draft-07, $ref, oneOf, icons, title) raise no complaint', () => {
-  for (const t of ['get_time', 'get_old_style', 'get_with_refs', 'get_fancy']) {
+  for (const t of ['get_time', 'get_old_style', 'get_with_refs', 'get_fancy', 'get_entities']) {
     const b = about('schemas', t).filter((f) => f.status === 'fail' || (f.status === 'warn' && f.check !== 'labels' && !/nearly the same description/.test(f.message)));
     assert.deepEqual(b, [], t);
   }
@@ -162,4 +162,10 @@ test('worst: a program that dies during a call is a crash, and later calls are "
 
 test('worst: a program that quits at start shows its own reason', () => {
   assert.match(f2('needsenv', 'connect')[0].message, /The program stopped before it could connect\. Its last message: "Error: API_KEY environment variable is required/);
+});
+
+test('weird but OK: a local program showing paths on your own computer is not a leak (real filesystem-server case)', async () => {
+  const r = await runTest('stdio:paths', { stdio: STDIO('paths'), timeoutMs: 20_000 });
+  const leaks = r.checks.find((c) => c.id === 'leaks')!;
+  assert.ok(!leaks.findings.some((f) => /shows internal details/.test(f.message)), JSON.stringify(leaks.findings));
 });

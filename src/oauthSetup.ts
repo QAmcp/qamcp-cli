@@ -168,8 +168,10 @@ export async function checkLoginSetup(serverUrl: string, opts: SetupOptions = {}
   if (dcr || cimd) add('pass', `AI apps can register themselves (${[dcr && 'dynamic registration', cimd && 'client ID metadata documents'].filter(Boolean).join(' and ')}).`);
   else add('warn', 'The login server offers no way for an AI app to register itself (no registration_endpoint, no client ID metadata support). Only apps that you pre-register can log in.');
 
-  if (Array.isArray(as.token_endpoint_auth_methods_supported) && !as.token_endpoint_auth_methods_supported.includes('none'))
-    add('warn', 'The login server doesn\'t accept "none" as a client authentication method, so apps without a secret (most AI apps) may be refused.');
+  // Apps that register with dynamic registration get a secret back, so they don't need "none".
+  // Apps that identify themselves with a metadata document have no secret: they need it.
+  if (cimd && !dcr && Array.isArray(as.token_endpoint_auth_methods_supported) && !as.token_endpoint_auth_methods_supported.includes('none'))
+    add('warn', 'AI apps can only identify themselves with a client ID metadata document here, but the login server doesn\'t accept "none" as a client authentication method, which those apps (having no secret) need.');
 
   return result(findings);
 }

@@ -60,8 +60,15 @@ export const VARIANTS: Record<string, Variant> = {
         inputSchema: { type: 'object', $defs: { Id: { type: 'string', description: 'Item id' } }, properties: { id: { $ref: '#/$defs/Id' }, mode: { oneOf: [{ const: 'a' }, { const: 'b' }], description: 'Mode' } }, required: ['id'] },
       }),
       tool('get_fancy', { title: 'Fancy getter', icons: [{ src: 'https://example.com/i.png', mimeType: 'image/png' }], execution: { taskSupport: 'optional' } }),
+      // A list whose inner fields are all described explains itself (real memory-server case).
+      tool('get_entities', { inputSchema: { type: 'object', properties: { entities: { type: 'array', items: { type: 'object', properties: { name: { type: 'string', description: 'Entity name' }, kind: { type: 'string', description: 'Entity type' } } } } } } }),
     ],
-    call: (name, args) => (name === 'get_old_style' || name === 'get_with_refs') && typeof args?.id !== 'string' ? { ...text('id is required and must be text'), isError: true } : text(`ok ${name}`),
+    call: (name, args) =>
+      (name === 'get_old_style' || name === 'get_with_refs') && typeof args?.id !== 'string'
+        ? { ...text('id is required and must be text'), isError: true }
+        : name === 'get_entities' && !Array.isArray(args?.entities)
+          ? { ...text('entities must be a list'), isError: true }
+          : text(`ok ${name} ${JSON.stringify(args)}`),
   },
   // Weird but OK: a tool that may only run as a background task. Calling it normally is
   // refused by the spec, so it can't be tested like a normal tool, and must not be blamed.

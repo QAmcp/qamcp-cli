@@ -144,11 +144,11 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
     push(toolsRespondCheck(report.calls, runnable.length, report.skippedTools));
     push(badInputCheck(report.calls, runnable.length));
     push(speedCheck(connectMs, listMs, report.calls, report.protocol?.transport === 'stdio'));
-    push(leakCheck(report.calls));
+    push(leakCheck(report.calls, !!opts.stdio));
     }
     // Resources and prompts: only a check when the server offers them.
     say({ kind: 'working', message: 'Opening resources and prompts' });
-    const rp = await checkResourcesAndPrompts(client, timeoutMs);
+    const rp = await checkResourcesAndPrompts(client, timeoutMs, !!opts.stdio);
     if (rp) push(rp.check);
     // Extra checks plugged in by another app (QAmcp's hosted version adds its AI tests here).
     for (const extra of opts.extraChecks ?? []) {
@@ -193,6 +193,9 @@ const DATA_FLOW: NonNullable<Report['dataFlow']> = {
 
 function protocolCheck(report: Report, stdoutJunk: string[] = []): CheckResult {
   const findings: Finding[] = [];
+  // Be open about it: checking stdout means starting the program a second time, briefly.
+  if (report.protocol?.transport === 'stdio')
+    findings.push({ status: stdoutJunk.length ? 'warn' : 'pass', message: stdoutJunk.length ? 'Checked what the program prints by starting it once more for a moment' : 'Prints only MCP messages on stdout (checked by starting the program once more for a moment)' });
   if (stdoutJunk.length)
     findings.push({ status: 'warn', message: `The program prints text that isn't an MCP message where only MCP messages may go (stdout): "${stdoutJunk[0]}". Some AI apps fail to connect because of it. Print logs to stderr instead.` });
   const { era, version, transport } = report.protocol!;
@@ -277,6 +280,10 @@ function toolListCheck(tools: Tool[], broken: { name: string; problem: string }[
 // An input counts as described if it, or the shared definition it points to ($ref), has a description.
 function describedInput(prop: any, root: any, depth = 0): boolean {
   if (prop?.description?.trim()) return true;
+  // A list or object whose inner fields are all described explains itself.
+  const inner = prop?.type === 'array' ? prop.items : prop;
+  const fields = inner?.properties && typeof inner.properties === 'object' ? Object.values(inner.properties) : [];
+  if (fields.length && depth < 5 && fields.every((f: any) => describedInput(f, root, depth + 1))) return true;
   const ref = typeof prop?.$ref === 'string' && prop.$ref.startsWith('#/') ? prop.$ref : undefined;
   if (!ref || depth > 5) return false;
   const target = ref.slice(2).split('/').reduce((o: any, k: string) => o?.[k.replace(/~1/g, '/').replace(/~0/g, '~')], root);
@@ -411,14 +418,15 @@ function speedCheck(connectMs: number, listMs: number, calls: ToolCallRecord[], 
   return check('speed', 'Fast enough', 5, findings);
 }
 
-function leakCheck(calls: ToolCallRecord[]): CheckResult {
+function leakCheck(calls: ToolCallRecord[], local = false): CheckResult {
   const findings: Finding[] = [];
   // Only error answers are scanned: normal answers from docs servers often contain example keys on purpose.
   for (const c of calls.filter((c) => c.outcome !== 'ok')) {
     // Report everything one message gives away, not just the first thing found.
     const secret = firstMatch(c.text, SECRET_PATTERNS);
     if (secret) findings.push({ status: 'fail', tool: c.tool, message: `Error message shows what looks like ${/^[aeiou]/i.test(secret) ? 'an' : 'a'} ${secret}` });
-    const internal = allMatches(c.text, INTERNAL_PATTERNS);
+    // A program on your own computer showing your own folders isn't leaking anything.
+    const internal = local ? [] : allMatches(c.text, INTERNAL_PATTERNS);
     if (internal.length) findings.push({ status: 'warn', tool: c.tool, message: `Error message shows internal details: ${internal.join(', ')}` });
   }
   const errorAnswers = calls.filter((c) => c.outcome !== 'ok').length;

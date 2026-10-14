@@ -59,7 +59,12 @@ variant('noasmeta', (v) => (v.asMeta = false));
 variant('httpendpoint', (v) => (v.as.token_endpoint = 'http://auth.example.com/token'));
 variant('nocode', (v) => (v.as.response_types_supported = ['token']));
 variant('noauthcode', (v) => (v.as.grant_types_supported = ['client_credentials']));
-variant('nonone', (v) => (v.as.token_endpoint_auth_methods_supported = ['client_secret_basic']));
+variant('nonone', (v) => (v.as.token_endpoint_auth_methods_supported = ['client_secret_basic'])); // has dynamic registration: apps get a secret
+variant('cimdnonone', (v) => {
+  delete v.as.registration_endpoint;
+  v.as.client_id_metadata_document_supported = true;
+  v.as.token_endpoint_auth_methods_supported = ['client_secret_basic'];
+});
 
 before(async () => {
   server = createServer((req, res) => {
@@ -120,7 +125,7 @@ const cases: [string, 'fail' | 'warn', RegExp][] = [
   ['issuerslash', 'warn', /differ only by a trailing slash.*strict AI apps may reject/],
   ['nodcr', 'warn', /no way for an AI app to register itself/],
   ['noheader', 'warn', /doesn't include a "resource_metadata" pointer/],
-  ['nonone', 'warn', /"none" as a client authentication method/],
+  ['cimdnonone', 'warn', /client ID metadata document here, but .*"none"/],
 ];
 for (const [v, status, pattern] of cases) {
   test(`${v}: reported as ${status} in plain words`, async () => {
@@ -130,6 +135,11 @@ for (const [v, status, pattern] of cases) {
     assert.equal(r!.status, status === 'fail' ? 'fail' : 'warn');
   });
 }
+
+test('no "none" is fine when apps can register and get a secret (real Vercel case)', async () => {
+  const r = await run('nonone');
+  assert.equal(r!.status, 'pass', JSON.stringify(r!.findings));
+});
 
 test('a resource that names a parent address is accepted, as the official SDK accepts it (real Semgrep case)', async () => {
   const r = await run('parent');

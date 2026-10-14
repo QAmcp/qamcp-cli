@@ -41,7 +41,9 @@ export interface ResourcePromptStats {
 }
 
 // Returns null when the server offers neither (then this check doesn't exist for it).
-export async function checkResourcesAndPrompts(client: Client, timeoutMs: number): Promise<{ check: CheckResult; stats: ResourcePromptStats } | null> {
+// local: a program on this computer, whose paths are the user's own folders (not a leak).
+export async function checkResourcesAndPrompts(client: Client, timeoutMs: number, local = false): Promise<{ check: CheckResult; stats: ResourcePromptStats } | null> {
+  const leakFindings = (text: string, where: string, add: (s: Status, m: string, t?: string) => void) => reportLeaks(text, where, add, local);
   const caps = client.getServerCapabilities() ?? {};
   if (!caps.resources && !caps.prompts) return null;
 
@@ -238,9 +240,15 @@ export async function checkResourcesAndPrompts(client: Client, timeoutMs: number
         else if (e.kind === 'bad-reply') add('fail', `Its reply breaks the MCP rules, so AI apps reject it: ${badReplyWords(e.text)}`, p.name);
         else if (e.kind === 'dropped') add('fail', 'Opening it cut the connection.', p.name);
         // With inputs, our sample values may simply be wrong for it: then it's the kind of error that's off, not a crash.
-        else if (internal && args.length) add('warn', `Our sample inputs get an internal error instead of an "invalid input" error: ${brokeWords(e, err)}`, p.name);
+        else if (internal && args.length) {
+          promptsNotChecked++;
+          add('warn', `Our sample inputs get an internal error instead of an "invalid input" error: ${brokeWords(e, err)}`, p.name);
+        }
         else if (internal) add('fail', `Opening it crashed: ${brokeWords(e, err)}`, p.name);
-        else add('warn', `Could not open it with sample inputs: ${errShort(err)}`, p.name);
+        else {
+          promptsNotChecked++;
+          add('warn', `Could not open it with sample inputs: ${errShort(err)}`, p.name);
+        }
         leakFindings(errText(err), p.name, add);
         continue;
       }
@@ -292,10 +300,10 @@ async function listAll(page: (cursor?: string) => Promise<any>, key: string): Pr
   return out;
 }
 
-function leakFindings(text: string, where: string, add: (s: Status, m: string, t?: string) => void) {
+function reportLeaks(text: string, where: string, add: (s: Status, m: string, t?: string) => void, local: boolean) {
   const secret = firstMatch(text, SECRET_PATTERNS);
   if (secret) add('fail', `Error message shows what looks like ${/^[aeiou]/i.test(secret) ? 'an' : 'a'} ${secret}`, where);
-  const internal = allMatches(text, INTERNAL_PATTERNS);
+  const internal = local ? [] : allMatches(text, INTERNAL_PATTERNS);
   if (internal.length) add('warn', `Error message shows internal details: ${internal.join(', ')}`, where);
 }
 

@@ -65,7 +65,8 @@ test('prompts: every planted mistake is caught', () => {
   assert.doesNotMatch(msgs('faulty', 'warn', 'welcome'), /Ignores/, 'one clear finding, not two');
   assert.match(msgs('faulty', 'warn', 'picky'), /sample inputs get an internal error instead of an "invalid input" error/);
   assert.equal(msgs('faulty', 'fail', 'picky'), '', 'rejecting our made-up value is not a crash');
-  assert.match(msgs('faulty', 'warn'), /Opened \d of 7 prompts/);
+  // prompts that only rejected our made-up inputs are not counted as failing to open
+  assert.match(msgs('faulty', 'warn'), /Opened \d of \d prompts; \d could not be checked/);
 });
 
 test('prompts done right are not accused: summarize uses its input and rejects a missing one', () => {

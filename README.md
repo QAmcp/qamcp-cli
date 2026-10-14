@@ -99,6 +99,7 @@ Rough guide: **90+** solid, **70–89** works but has things to fix, **below 70*
 - **It never runs a tool that could change something.** By default it runs only tools the server labels read-only.
 - **It never runs a tool that sounds destructive**, like `delete_account`, in any mode.
 - **It never sends your data anywhere else.** No AI, no tracking, no telemetry.
+- **For a program on your computer (`--stdio`), it starts the program a second time for a moment** to check that it prints only MCP messages, and says so in the report.
 
 If you own the server, `--owner` also runs unlabeled tools whose names clearly only read (`get_`, `list_`, `search_`…). Tools whose name or description says they write, send or create are still skipped.
 
