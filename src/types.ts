@@ -27,7 +27,7 @@ export interface ToolCallRecord {
   why: RunReason; // why we were allowed to run it
   arguments: unknown;
   ms: number;
-  outcome: 'ok' | 'tool-error' | 'protocol-error' | 'timeout' | 'crash';
+  outcome: 'ok' | 'tool-error' | 'protocol-error' | 'timeout' | 'crash' | 'needs-login'; // needs-login: the tool asked us to sign in first
   text: string; // everything the server sent back, flattened to text (used for the secrets scan)
   note?: string; // something unusual about how the server answered
 }

@@ -18,6 +18,8 @@ export function formatReport(r: Report): string {
   if (checksRun < checksTotal) lines.push(`(The score only counts what we could test.)`);
   if (r.dataFlow) lines.push(r.dataFlow.summary);
   const byName = [...new Set(r.calls.filter((c) => c.why === 'name says read-only').map((c) => c.tool))];
+  const signIn = [...new Set(r.calls.filter((c) => c.outcome === 'needs-login').map((c) => c.tool))].filter((t) => !r.calls.some((c) => c.tool === t && c.outcome !== 'needs-login'));
+  if (signIn.length) lines.push(`${signIn.length} tool${signIn.length === 1 ? '' : 's'} asked us to sign in first, so ${signIn.length === 1 ? 'it was' : 'they were'} not tested: ${signIn.join(', ')}. Test again with --login or --header to include ${signIn.length === 1 ? 'it' : 'them'}.`);
   if (byName.length) lines.push(`Ran ${byName.length} unlabeled tool${byName.length === 1 ? '' : 's'} because the name says it only reads: ${byName.join(', ')}`);
   const unlabeled = r.skippedTools.filter((s) => s.why.startsWith('no safety label'));
   const capped = r.skippedTools.filter((s) => s.why.startsWith('we test at most'));
@@ -37,10 +39,19 @@ export function formatReport(r: Report): string {
     const toolPasses = c.findings.filter((f) => f.status === 'pass' && f.tool);
     const collapse = toolPasses.length > 3;
     // With problems in the same check, say how many passed out of how many, so "all passed" never sits next to a failure.
-    const toolResults = c.findings.filter((f) => f.tool).length;
+    const toolResults = c.findings.filter((f) => f.tool && f.status !== 'skip').length;
     if (collapse) lines.push(`     ${ICON.pass} ${toolPasses.length === toolResults ? `All ${toolResults} passed` : `${toolPasses.length} of ${toolResults} passed (the problems are listed below)`}`);
+    // The same "not tested" reason for many tools becomes one line (the tools are named at the top).
+    const skipGroups = new Map<string, number>();
+    for (const f of c.findings) if (f.status === 'skip' && f.tool) skipGroups.set(f.message, (skipGroups.get(f.message) ?? 0) + 1);
+    const shownGroups = new Set<string>();
     for (const f of c.findings) {
       if (collapse && f.status === 'pass' && f.tool) continue;
+      if (f.status === 'skip' && f.tool && (skipGroups.get(f.message) ?? 0) > 3) {
+        if (!shownGroups.has(f.message)) lines.push(`     ${ICON.skip} ${skipGroups.get(f.message)} tools: ${f.message.replace(/^Not run: /, 'not run: ')}`);
+        shownGroups.add(f.message);
+        continue;
+      }
       lines.push(`     ${ICON[f.status]} ${f.tool && !f.message.includes(f.tool) ? f.tool + ': ' : ''}${f.message}`);
     }
   }

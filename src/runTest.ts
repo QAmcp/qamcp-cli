@@ -143,7 +143,7 @@ function finish(report: Report): Report {
     // The login-setup check only exists when the server asks for a login.
     // Some checks only exist for some servers (login, resources and prompts, plug-ins).
     checksTotal: CHECKS_TOTAL + report.checks.filter((c) => !CORE_CHECKS.has(c.id)).length,
-    toolsRun: new Set(report.calls.map((c) => c.tool)).size,
+    toolsRun: new Set(report.calls.filter((c) => c.outcome !== 'needs-login').map((c) => c.tool)).size,
     toolsTotal: report.toolCount,
   };
   return report;
@@ -269,10 +269,12 @@ function toolsRespondCheck(calls: ToolCallRecord[], ran: number, skipped: Report
     else if (c.outcome === 'ok') findings.push({ status: 'pass', tool: c.tool, message: `Worked (${fmtMs(c.ms)})` });
     else if (c.outcome === 'tool-error' || c.outcome === 'protocol-error') findings.push({ status: 'pass', tool: c.tool, message: `Answered with an error, probably because of our sample input: ${short(c.text)}` });
     else if (c.outcome === 'timeout') findings.push({ status: 'fail', tool: c.tool, message: `No answer within the time limit` });
+    else if (c.outcome === 'needs-login') findings.push({ status: 'skip', tool: c.tool, message: 'Needs you to sign in, so it was not tested (not counted against the server)' });
     else findings.push({ status: 'fail', tool: c.tool, message: `Crashed: ${short(c.text)}` });
   }
   for (const s of skipped) findings.push({ status: 'skip', tool: s.tool, message: `Not run: ${s.why}` });
-  return check('respond', 'Tools work with good inputs', 10, findings, ran === 0);
+  const tested = good.filter((c) => c.outcome !== 'needs-login').length;
+  return check('respond', 'Tools work with good inputs', 10, findings, ran === 0 || tested === 0);
 }
 
 function badInputCheck(calls: ToolCallRecord[], ran: number): CheckResult {
@@ -286,11 +288,12 @@ function badInputCheck(calls: ToolCallRecord[], ran: number): CheckResult {
         : { status: 'pass', tool: c.tool, message: `Refused ${what} with a clear error` });
     } else if (c.outcome === 'ok') findings.push({ status: 'warn', tool: c.tool, message: `Accepted ${what} without complaining` });
     else if (c.outcome === 'timeout') findings.push({ status: 'fail', tool: c.tool, message: `Hung on ${what}` });
+    else if (c.outcome === 'needs-login') findings.push({ status: 'skip', tool: c.tool, message: 'Needs you to sign in, so bad inputs were not tested' });
     else findings.push({ status: 'fail', tool: c.tool, message: `Crashed on ${what}` });
   }
   const oddErrors = [...new Set(calls.filter((c) => c.note).map((c) => c.tool))];
   if (oddErrors.length) findings.push({ status: 'warn', message: `Errors are sent with an HTTP error status (like 400) instead of a normal MCP reply, so some AI apps may treat them as crashes: ${oddErrors.join(', ')}` });
-  return check('bad-input', 'Bad inputs give a clean error', 10, findings, ran === 0 || findings.length === 0);
+  return check('bad-input', 'Bad inputs give a clean error', 10, findings, ran === 0 || findings.every((f) => f.status === 'skip'));
 }
 
 function speedCheck(connectMs: number, listMs: number, calls: ToolCallRecord[], isProgram = false): CheckResult {
@@ -303,7 +306,7 @@ function speedCheck(connectMs: number, listMs: number, calls: ToolCallRecord[], 
   else findings.push({ status: connectStatus, message: `Connecting took ${fmtMs(connectMs)}` });
   findings.push({ status: rate(listMs), message: `Listing tools took ${fmtMs(listMs)}` });
 
-  const timed = calls.filter((c) => c.kind === 'good-input' && c.outcome !== 'timeout');
+  const timed = calls.filter((c) => c.kind === 'good-input' && c.outcome !== 'timeout' && c.outcome !== 'needs-login');
   if (timed.length) {
     const avg = timed.reduce((s, c) => s + c.ms, 0) / timed.length;
     const slowest = timed.reduce((a, b) => (b.ms > a.ms ? b : a));
@@ -360,6 +363,8 @@ async function callTool(client: Client, tool: Tool, why: ToolCallRecord['why'], 
     const text = errText(err);
     const rpcMessage = text.match(/"error"\s*:\s*\{\s*"code"\s*:\s*-?\d+\s*,\s*"message"\s*:\s*"((?:[^"\\]|\\.)*)"/)?.[1];
     if (rpcMessage) return { tool: tool.name, why, kind, arguments: args, ms, outcome: 'protocol-error', text: rpcMessage, note: 'sent with an HTTP error status instead of a normal MCP reply' };
+    // "Sign in first" (HTTP 401/403, or saying so) is the tool working as designed, not a crash.
+    if (needsLogin(err) || SIGN_IN.test(text)) return { tool: tool.name, why, kind, arguments: args, ms, outcome: 'needs-login', text };
     return { tool: tool.name, why, kind, arguments: args, ms, outcome: 'crash', text };
   }
 }
@@ -377,6 +382,8 @@ function errText(err: unknown): string {
   }
   return String(err);
 }
+
+const SIGN_IN = /\b(?:401|403)\b|unauthori[sz]ed|forbidden|sign[ -]?in\b|log[ -]?in required|not authenticated|authentication required|access token|invalid_token/i;
 
 function needsLogin(err: unknown): boolean {
   const status = (err as any)?.data?.status ?? (err as any)?.status;
