@@ -1,16 +1,16 @@
 # QAmcp
 
-[![npm](https://img.shields.io/npm/v/qamcp)](https://www.npmjs.com/package/qamcp) [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![npm](https://img.shields.io/npm/v/qamcp-cli)](https://www.npmjs.com/package/qamcp-cli) [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 **Test any MCP server in one command.** Find out what's broken before your users (or their AI apps) do.
 
 ```bash
-npx qamcp https://your-server.com/mcp
+npx qamcp-cli https://your-server.com/mcp
 ```
 
-You need [Node.js](https://nodejs.org) 20 or newer. Nothing else to install: `npx` downloads QAmcp the first time.
+You need [Node.js](https://nodejs.org) 20 or newer. Nothing else to install: `npx` downloads QAmcp the first time. Or install it once with `npm install -g qamcp-cli` and then just type `qamcp`.
 
-Package on npm: [npmjs.com/package/qamcp](https://www.npmjs.com/package/qamcp)
+Package on npm: [npmjs.com/package/qamcp-cli](https://www.npmjs.com/package/qamcp-cli)
 
 Every result is a hard fact: pass or fail, milliseconds, exact matches. No AI judges anything,
 and nothing is sent anywhere except to the server you test.
@@ -46,13 +46,13 @@ Tools that sound destructive are never run, in any mode.
 ## More ways to run it
 
 ```bash
-npx qamcp https://your-server.com/mcp --header "Authorization: Bearer YOUR_KEY"   # a server with a key
-npx qamcp https://your-server.com/mcp --login                                     # log in through your browser
-npx qamcp --stdio "npx -y @your-org/your-mcp-server"                              # a program on your computer
-npx qamcp https://your-server.com/mcp --json report.json                         # save the full report
+npx qamcp-cli https://your-server.com/mcp --header "Authorization: Bearer YOUR_KEY"   # a server with a key
+npx qamcp-cli https://your-server.com/mcp --login                                     # log in through your browser
+npx qamcp-cli --stdio "npx -y @your-org/your-mcp-server"                              # a program on your computer
+npx qamcp-cli https://your-server.com/mcp --json report.json                         # save the full report
 ```
 
-Run `npx qamcp --help` for every option.
+Run `npx qamcp-cli --help` for every option.
 
 ## Test on every change (GitHub)
 
@@ -82,7 +82,7 @@ tools that changed or disappeared.
 From any other CI system:
 
 ```bash
-npx qamcp https://your-server.com/mcp --fail-under 80 --baseline base.json --save-baseline base.json --junit report.xml
+npx qamcp-cli https://your-server.com/mcp --fail-under 80 --baseline base.json --save-baseline base.json --junit report.xml
 ```
 
 Exit codes: `0` fine · `1` a check you required failed · `2` wrong options · `3` could not test (server down, or needs a login).
@@ -97,7 +97,7 @@ docker run --rm qamcp https://your-server.com/mcp
 ## Use it from code
 
 ```ts
-import { runTest } from 'qamcp';
+import { runTest } from 'qamcp-cli';
 
 const report = await runTest('https://your-server.com/mcp');
 console.log(report.score, report.checks);

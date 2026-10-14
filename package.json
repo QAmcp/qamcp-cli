@@ -1,20 +1,47 @@
 {
-  "name": "qamcp",
+  "name": "qamcp-cli",
   "version": "0.1.0",
   "description": "Test any MCP server: connection, tools, security, login, resources and prompts. Hard facts, no AI judging.",
-  "keywords": ["mcp", "model-context-protocol", "testing", "tester", "ci", "security", "oauth", "ai-agents"],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "testing",
+    "tester",
+    "ci",
+    "security",
+    "oauth",
+    "ai-agents"
+  ],
   "license": "MIT",
   "author": "QAmcp",
   "homepage": "https://github.com/abhiramreddykalluru01-debug/qamcp-cli#readme",
-  "repository": { "type": "git", "url": "git+https://github.com/abhiramreddykalluru01-debug/qamcp-cli.git" },
-  "bugs": { "url": "https://github.com/abhiramreddykalluru01-debug/qamcp-cli/issues" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abhiramreddykalluru01-debug/qamcp-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/abhiramreddykalluru01-debug/qamcp-cli/issues"
+  },
   "type": "module",
-  "bin": { "qamcp": "dist/cli.js" },
+  "bin": {
+    "qamcp": "dist/cli.js"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
-  "files": ["dist", "README.md", "LICENSE"],
-  "engines": { "node": ">=20" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
