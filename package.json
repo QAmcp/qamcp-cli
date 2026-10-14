@@ -1,19 +1,23 @@
 {
   "name": "qamcp-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Test any MCP server: connection, tools, security, login, resources and prompts. Hard facts, no AI judging.",
   "keywords": [
     "mcp",
+    "mcp-server",
     "model-context-protocol",
     "testing",
-    "tester",
+    "test-automation",
+    "cli",
+    "github-action",
     "ci",
     "security",
     "oauth",
+    "developer-tools",
     "ai-agents"
   ],
   "license": "MIT",
-  "author": "QAmcp",
+  "author": "Abhiram Reddy Kalluru",
   "homepage": "https://github.com/abhiramreddykalluru01-debug/qamcp-cli#readme",
   "repository": {
     "type": "git",
