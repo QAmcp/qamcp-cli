@@ -64,7 +64,35 @@ Privacy: nothing was sent anywhere except to the server being tested (and its lo
 | **Login setup follows the spec** | Only when a server needs a login: the OAuth details AI apps need to log in |
 | **Resources and prompts work** | Only when a server has them: each opens, content matches its type, inputs are used |
 
-Serious problems (hidden instructions, leaked secrets, crashes) cap the score, and every report says how much was actually tested.
+## How to read the score
+
+The score is plain arithmetic, so you can check it yourself.
+
+1. **Each check is worth points.** A pass earns all of them, a warning half, a failure none.
+
+   | Check | Points |
+   |---|---|
+   | Connects, Every tool is described | 15 each |
+   | Newest MCP version, Lists its tools, Safety labels, No hidden instructions, Good inputs, Bad inputs | 10 each |
+   | Login setup, Resources and prompts (only when the server has them) | 10 each |
+   | Fast enough, No secrets leaked | 5 each |
+
+2. **Checks that could not run don't count, either way.** The score is points earned out of the points that were actually tested, so a server isn't punished for something we couldn't try.
+3. **Serious problems put a ceiling on the score**, however good the rest is. The lowest ceiling wins:
+
+   | Problem | Highest possible score |
+   |---|---|
+   | Hidden instructions in a tool, resource or prompt description | 40 |
+   | A secret (key, password, private key) leaked in an error message | 50 |
+   | A broken tool definition that can stop AI apps loading the server | 50 |
+   | A tool that crashes or hangs, or claims success but returns nothing | 70 |
+
+   When a ceiling applies, the report says so: *"Would be 85, but capped at 50 because…"*
+
+4. **Always read the score together with the coverage line,** e.g. `Tested 10 of 10 checks · ran 5 of 9 tools`. A 90 where only 2 of 20 tools could run says much less than a 90 where all 20 ran. Tools are only run when that's safe (see below), so coverage tells you how much the score really covers.
+5. **"NOT SCORED"** means we couldn't test the server for a reason that isn't its fault, like a login wall. Add a key with `--header` or log in with `--login`, then test again.
+
+Rough guide: **90+** solid, **70–89** works but has things to fix, **below 70** AI apps will likely struggle, or there is a safety problem.
 
 ## What it never does
 

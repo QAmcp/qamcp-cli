@@ -104,3 +104,15 @@ test('a dead address fails cleanly with a plain message', async () => {
   assert.equal(dead.checks[0].status, 'fail');
   assert.match(dead.checks[0].findings[0].message, /Nothing is running|Could not connect/);
 });
+
+import { formatReport } from '../src/report.js';
+
+test('the printed report never says "All passed" next to a problem in the same check', () => {
+  const text = formatReport(report);
+  const badInput = text.split('\n').filter((l) => /passed/.test(l) && /^\s+✅/.test(l));
+  assert.ok(badInput.length, 'a collapsed pass line is printed');
+  assert.match(text, /✅ \d+ of \d+ passed \(the problems are listed below\)/);
+  // every "All N passed" line belongs to a check with no warnings or failures
+  const blocks = text.split(/\n(?=[✅⚠️❌➖])/u);
+  for (const b of blocks) if (/All \d+ passed/.test(b)) assert.doesNotMatch(b, /⚠️|❌/u, b);
+});

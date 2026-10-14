@@ -36,7 +36,9 @@ export function formatReport(r: Report): string {
     // Summary lines (no tool) always show; per-tool passes fold away when there are many.
     const toolPasses = c.findings.filter((f) => f.status === 'pass' && f.tool);
     const collapse = toolPasses.length > 3;
-    if (collapse) lines.push(`     ${ICON.pass} All ${toolPasses.length} passed`);
+    // With problems in the same check, say how many passed out of how many, so "all passed" never sits next to a failure.
+    const toolResults = c.findings.filter((f) => f.tool).length;
+    if (collapse) lines.push(`     ${ICON.pass} ${toolPasses.length === toolResults ? `All ${toolResults} passed` : `${toolPasses.length} of ${toolResults} passed (the problems are listed below)`}`);
     for (const f of c.findings) {
       if (collapse && f.status === 'pass' && f.tool) continue;
       lines.push(`     ${ICON[f.status]} ${f.tool && !f.message.includes(f.tool) ? f.tool + ': ' : ''}${f.message}`);
