@@ -88,11 +88,17 @@ test('--fail-on-fail: a leaked key fails the build, naming the check', () => {
 test('files: JSON, JUnit, markdown, baseline, and the GitHub summary', () => {
   const summary = join(dir, 'summary.md');
   const r = qamcp(
-    [...leakyUrl, '--json', join(dir, 'r.json'), '--junit', join(dir, 'r.xml'), '--markdown', join(dir, 'r.md'), '--save-baseline', join(dir, 'nested', 'base.json')],
+    [...leakyUrl, '--json', join(dir, 'r.json'), '--junit', join(dir, 'r.xml'), '--markdown', join(dir, 'r.md'), '--html', join(dir, 'r.html'), '--save-baseline', join(dir, 'nested', 'base.json')],
     { GITHUB_STEP_SUMMARY: summary },
   );
   assert.equal(r.code, 0);
-  for (const f of ['r.json', 'r.xml', 'r.md', join('nested', 'base.json'), 'summary.md']) assert.ok(existsSync(join(dir, f)), f);
+  for (const f of ['r.json', 'r.xml', 'r.md', 'r.html', join('nested', 'base.json'), 'summary.md']) assert.ok(existsSync(join(dir, f)), f);
+  // the report page: the real result, fonts built in, nothing fetched
+  const html = readFileSync(join(dir, 'r.html'), 'utf8');
+  assert.match(html, /Test certificate: leaky-test-server/);
+  assert.match(html, /class="stamp fail">FAIL</);
+  assert.match(html, /data:font\/woff2;base64,/);
+  assert.doesNotMatch(html, /<script|<link\b/);
 
   const json = JSON.parse(readFileSync(join(dir, 'r.json'), 'utf8'));
   assert.equal(json.server.name, 'leaky-test-server');

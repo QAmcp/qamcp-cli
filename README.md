@@ -131,6 +131,7 @@ With `--owner`, it also ran `list_projects` (unlabeled, name only reads) and sti
 npx qamcp-cli https://your-server.com/mcp --header "Authorization: Bearer YOUR_KEY"   # a server with a key
 npx qamcp-cli https://your-server.com/mcp --login                                     # log in through your browser
 npx qamcp-cli https://your-server.com/mcp --json report.json                         # save the full report
+npx qamcp-cli https://your-server.com/mcp --html report.html                         # a report page you can open and share (works offline)
 ```
 
 ## Test on every change (GitHub)

@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { type Args, parseArgs, UsageError, USAGE } from './cliArgs.js';
 import { compareReports, evaluateGates, toJUnit, toMarkdown } from './ci.js';
 import { openInBrowser } from './oauth.js';
+import { toHtml } from './htmlReport.js';
 import { formatReport } from './report.js';
 import { runTest } from './runTest.js';
 import type { Report } from './types.js';
@@ -69,6 +70,7 @@ const write = (file: string, text: string, what: string) => {
   console.log(`${what} saved to ${file}`);
 };
 if (args.json) write(args.json, JSON.stringify(report, null, 2), 'Full report');
+if (args.html) write(args.html, toHtml(report), 'Report page');
 if (args.saveBaseline) write(args.saveBaseline, JSON.stringify(report, null, 2), 'Baseline');
 if (args.junit) write(args.junit, toJUnit(report), 'JUnit report');
 const markdown = toMarkdown(report, comparison, args.failUnder !== undefined || args.failOnFail || baseline ? gate : undefined);

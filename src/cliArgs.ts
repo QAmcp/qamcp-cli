@@ -25,6 +25,7 @@ For CI (run on every change)
   --junit <file.xml>         write a JUnit XML report
   --markdown <file.md>       write a short report for pull-request comments
   --json <file.json>         write the full report
+  --html <file.html>         write the report as a page you can open and share (works offline)
 
 Exit codes: 0 fine · 1 a CI gate failed · 2 wrong options · 3 could not test (server down or needs a login)
 
@@ -45,6 +46,7 @@ export interface Args {
   junit?: string;
   markdown?: string;
   json?: string;
+  html?: string;
   help: boolean;
 }
 
@@ -97,6 +99,7 @@ export function parseArgs(argv: string[]): Args {
       case '--junit': a.junit = need(++i, f); break;
       case '--markdown': a.markdown = need(++i, f); break;
       case '--json': a.json = need(++i, f); break;
+      case '--html': a.html = need(++i, f); break;
       case '--help': case '-h': a.help = true; break;
       default:
         if (f.startsWith('--')) throw new UsageError(`Unknown option ${f}.`);
