@@ -15,6 +15,7 @@ export interface Connection {
   transport: 'streamable-http' | 'sse' | 'stdio';
   ms: number;
   loggedIn?: boolean;
+  programOutput?: () => string; // stdio only: the last things the program wrote to stderr
 }
 
 export interface LoginOptions {
@@ -66,10 +67,73 @@ async function connectStdio(target: StdioTarget, timeoutMs: number): Promise<Con
     args: target.args ?? [],
     env: target.env ? { ...getDefaultEnvironment(), ...target.env } : undefined,
     cwd: target.cwd,
-    stderr: 'ignore', // the program's log lines are not part of the protocol
+    stderr: 'pipe', // not part of the protocol, but it's where a program says why it stopped
   });
-  await client.connect(transport, { timeout: timeoutMs });
-  return { client, transport: 'stdio', ms: Date.now() - started };
+  let output = '';
+  transport.stderr?.on('data', (d: Buffer) => (output = (output + d.toString()).slice(-4000)));
+  try {
+    await client.connect(transport, { timeout: timeoutMs });
+  } catch (err) {
+    // Give the person the program's own words: usually "X is required" or a stack trace.
+    if (err && typeof err === 'object') (err as any).programOutput = lastWords(output);
+    throw err;
+  }
+  return { client, transport: 'stdio', ms: Date.now() - started, programOutput: () => lastWords(output) };
+}
+
+// The last meaningful line a program printed, for a plain message.
+export function lastWords(output: string): string {
+  const lines = output.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const meaningful = lines.filter((l) => !/^at\s|^\s*\^|^node:internal|^Node\.js v/.test(l));
+  return (meaningful.at(-1) ?? lines.at(-1) ?? '').slice(0, 200);
+}
+
+// The MCP rules: a program MUST NOT write anything but MCP messages on stdout. The official
+// client quietly skips such lines, but some AI apps fail to connect because of them, so start
+// the program once more and look at exactly what it prints before its first reply.
+export async function stdoutNoise(target: StdioTarget, timeoutMs = 15_000): Promise<string[]> {
+  // The same launcher the official SDK uses, so commands like npx work on Windows too.
+  const spawn: any = ((await import('cross-spawn')) as any).default;
+  return new Promise((resolve) => {
+    const noise: string[] = [];
+    let buffer = '';
+    let done = false;
+    const child = spawn(target.command, target.args ?? [], {
+      env: target.env ? { ...getDefaultEnvironment(), ...target.env } : (getDefaultEnvironment() as NodeJS.ProcessEnv),
+      cwd: target.cwd,
+      stdio: ['pipe', 'pipe', 'ignore'],
+      shell: false,
+      windowsHide: true,
+    });
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      child.kill();
+      resolve(noise);
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    child.on('error', finish);
+    child.on('exit', finish);
+    child.stdout.on('data', (d: Buffer) => {
+      buffer += d.toString();
+      let nl: number;
+      while ((nl = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        if (!line) continue;
+        let isMcp = false;
+        try {
+          isMcp = JSON.parse(line)?.jsonrpc === '2.0';
+        } catch {
+          // not JSON
+        }
+        if (!isMcp) noise.push(line.slice(0, 160));
+        else if (JSON.parse(line).id === 1) return finish(); // its first real reply: we've seen enough
+      }
+    });
+    child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'qamcp', version: '0.1.0' } } }) + '\n');
+  });
 }
 
 // Same, but if the server asks for a login, send the person to its login page,

@@ -1,5 +1,5 @@
-import { ProtocolError, SdkError, SdkErrorCode, type Client, type Tool } from '@modelcontextprotocol/client';
-import { connect } from './connect.js';
+import { ProtocolError, SdkError, SdkErrorCode, fromJsonSchema, specTypeSchemas, type Client, type Tool } from '@modelcontextprotocol/client';
+import { connect, stdoutNoise } from './connect.js';
 import { toolboxHash, toolFingerprints } from './ci.js';
 import { checkResourcesAndPrompts } from './resourcesPrompts.js';
 import { badReplyWords, classifyError } from './errorKind.js';
@@ -12,6 +12,7 @@ import { scoreOf } from './score.js';
 import type { CheckResult, Finding, ProgressEvent, Report, Status, TestOptions, ToolCallRecord } from './types.js';
 
 const MAX_TOOLS_TO_RUN = 60;
+const BIG_ANSWER = 100_000; // characters, roughly 25,000 tokens
 // Answers that mean we did not really test the tool. Never counted against the server.
 const NOT_TESTED = new Set<ToolCallRecord['outcome']>(['needs-login', 'rate-limited', 'unclear']);
 const CHECKS_TOTAL = 10;
@@ -43,6 +44,7 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
   // 1. Connect
   let client: Client;
   let connectMs: number;
+  let programOutput: (() => string) | undefined;
   try {
     const conn = await connect(url, opts.headers ?? {}, timeoutMs, opts.login, opts.fetch, opts.stdio, opts.authProvider);
     client = conn.client;
@@ -50,9 +52,10 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
     const info = client.getServerVersion();
     report.server = { name: info?.name, version: info?.version };
     report.protocol = { era: client.getProtocolEra(), version: client.getNegotiatedProtocolVersion(), transport: conn.transport };
+    programOutput = conn.programOutput;
     push(check('connect', 'Connects', 15, [{ status: 'pass', message: `Connected in ${fmtMs(connectMs)}` }]));
   } catch (err) {
-    push(check('connect', 'Connects', 15, [{ status: 'fail', message: explainConnectError(err) }]));
+    push(check('connect', 'Connects', 15, [{ status: 'fail', message: explainConnectError(err, !!opts.stdio) }]));
     // A login wall isn't a broken server: say so instead of giving it a zero.
     if (needsLogin(err)) report.notScored = 'needs a login';
     // Even without logging in we can read the server's public login setup, and often explain why logging in fails.
@@ -64,7 +67,8 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
   }
 
   try {
-    push(protocolCheck(report));
+    const noise = opts.stdio ? await stdoutNoise(opts.stdio).catch(() => []) : [];
+    push(protocolCheck(report, noise));
     if (!opts.stdio) {
       const login = await checkLoginSetup(url, { fetch: opts.fetch, timeoutMs: 10_000 });
       if (login) push(login);
@@ -73,25 +77,37 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
     // 2. Tool list
     let tools: Tool[] = [];
     let broken: { name: string; problem: string }[] = [];
-    const listStarted = Date.now();
-    try {
-      tools = (await client.listTools(undefined, { timeout: timeoutMs })).tools;
-    } catch (err) {
-      // The official client rejects the whole list when one tool is malformed, and so may
-      // AI apps. Read the list without that check, name the broken tools, test the rest.
+    let listMs = 0;
+    const offersTools = !!client.getServerCapabilities()?.tools;
+    report.offersTools = offersTools;
+    if (!offersTools) {
+      push(check('tools', 'Lists its tools', 10, [{ status: 'skip', message: 'This server offers no tools (it only has resources or prompts), so the tool checks do not apply' }], true));
+    } else {
+      const listStarted = Date.now();
+      let listing: Awaited<ReturnType<typeof listToolsPaged>>;
       try {
-        ({ tools, broken } = splitRawTools(await client.request({ method: 'tools/list', params: {} } as any, PERMISSIVE as any, { timeout: timeoutMs })));
-      } catch {
+        listing = await listToolsPaged(client, timeoutMs);
+      } catch (err) {
         push(check('tools', 'Lists its tools', 10, [{ status: 'fail', message: toolListError(errText(err)) }]));
         return finish(report);
       }
+      listMs = Date.now() - listStarted;
+      ({ tools, broken } = listing);
+      // The official client is stricter about the reply as a whole (e.g. the 2026-07-28 "resultType").
+      let sdkProblem: string | undefined;
+      if (!broken.length) {
+        try {
+          await client.listTools(undefined, { timeout: timeoutMs });
+        } catch (err) {
+          sdkProblem = toolListError(errText(err));
+        }
+      }
+      report.toolCount = tools.length + broken.length;
+      report.toolboxHash = toolboxHash(tools);
+      report.toolFingerprints = toolFingerprints(tools);
+      push(toolListCheck(tools, broken, listing.loop, sdkProblem));
     }
-    const listMs = Date.now() - listStarted;
-    report.toolCount = tools.length + broken.length;
-    report.toolboxHash = toolboxHash(tools);
-    report.toolFingerprints = toolFingerprints(tools);
-    push(toolListCheck(tools, broken));
-    if (!tools.length) return finish(report);
+    if (tools.length) {
 
     push(descriptionCheck(tools));
     push(safetyLabelCheck(tools));
@@ -106,10 +122,22 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
       else runnable.push({ tool, why: d.why });
     }
     say({ kind: 'working', message: `Trying ${runnable.length} safe tool${runnable.length === 1 ? '' : 's'} with good and bad inputs` });
+    // A local program that dies can't answer anything after that: those calls are not tests.
+    let programDied = false;
+    const run = async (tool: Tool, why: ToolCallRecord['why'], kind: ToolCallRecord['kind'], args: Record<string, unknown>): Promise<ToolCallRecord> => {
+      if (programDied) return { tool: tool.name, why, kind, arguments: args, ms: 0, outcome: 'unclear', text: '', reason: 'the program had already stopped' };
+      const rec = await callTool(client, tool, why, kind, args, timeoutMs);
+      if (opts.stdio && rec.outcome === 'crash' && rec.reason?.startsWith('the connection was cut')) {
+        programDied = true;
+        const said = programOutput?.();
+        return { ...rec, reason: `the program stopped${said ? ` (its last message: "${said}")` : ''}` };
+      }
+      return rec;
+    };
     for (const { tool, why } of runnable) {
-      report.calls.push(await callTool(client, tool, why, 'good-input', goodArgs(tool.inputSchema), timeoutMs));
+      report.calls.push(await run(tool, why, 'good-input', goodArgs(tool.inputSchema)));
       for (const bad of badArgs(tool.inputSchema)) {
-        const rec = await callTool(client, tool, why, 'bad-input', bad.args, timeoutMs);
+        const rec = await run(tool, why, 'bad-input', bad.args);
         report.calls.push({ ...rec, text: `[${bad.label}] ${rec.text}` });
       }
     }
@@ -117,6 +145,7 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
     push(badInputCheck(report.calls, runnable.length));
     push(speedCheck(connectMs, listMs, report.calls, report.protocol?.transport === 'stdio'));
     push(leakCheck(report.calls));
+    }
     // Resources and prompts: only a check when the server offers them.
     say({ kind: 'working', message: 'Opening resources and prompts' });
     const rp = await checkResourcesAndPrompts(client, timeoutMs);
@@ -145,7 +174,8 @@ function finish(report: Report): Report {
     checksRun: report.checks.filter((c) => c.status !== 'skip').length,
     // The login-setup check only exists when the server asks for a login.
     // Some checks only exist for some servers (login, resources and prompts, plug-ins).
-    checksTotal: CHECKS_TOTAL + report.checks.filter((c) => !CORE_CHECKS.has(c.id)).length,
+    // Without a tools feature the tool checks don't apply, so they aren't counted as untested.
+    checksTotal: report.offersTools === false ? report.checks.filter((c) => c.id !== 'tools').length : CHECKS_TOTAL + report.checks.filter((c) => !CORE_CHECKS.has(c.id)).length,
     toolsRun: new Set(report.calls.filter((c) => !NOT_TESTED.has(c.outcome)).map((c) => c.tool)).size,
     toolsTotal: report.toolCount,
   };
@@ -161,8 +191,10 @@ const DATA_FLOW: NonNullable<Report['dataFlow']> = {
 
 // ---------- checks ----------
 
-function protocolCheck(report: Report): CheckResult {
+function protocolCheck(report: Report, stdoutJunk: string[] = []): CheckResult {
   const findings: Finding[] = [];
+  if (stdoutJunk.length)
+    findings.push({ status: 'warn', message: `The program prints text that isn't an MCP message where only MCP messages may go (stdout): "${stdoutJunk[0]}". Some AI apps fail to connect because of it. Print logs to stderr instead.` });
   const { era, version, transport } = report.protocol!;
   if (era === 'modern') findings.push({ status: 'pass', message: `Uses the latest MCP version (${version})` });
   else findings.push({ status: 'warn', message: `Uses an older MCP version (${version}). It works today, but it isn't on the July 2026 version (2026-07-28) yet.` });
@@ -174,6 +206,29 @@ function protocolCheck(report: Report): CheckResult {
 const PERMISSIVE = { '~standard': { version: 1, vendor: 'qamcp', validate: (value: unknown) => ({ value }) } };
 
 // Separate tools AI apps can load from tools that break the MCP rules for a tool definition.
+const MAX_PAGES = 50;
+
+// Reads every page of the tool list, the way an AI app does, and notices a list that never ends.
+async function listToolsPaged(client: Client, timeoutMs: number): Promise<{ tools: Tool[]; broken: { name: string; problem: string }[]; loop: boolean }> {
+  const raw: any[] = [];
+  const seen = new Set<string>();
+  let cursor: string | undefined;
+  let loop = false;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const res: any = await client.request({ method: 'tools/list', params: cursor ? { cursor } : {} } as any, PERMISSIVE as any, { timeout: timeoutMs });
+    if (Array.isArray(res?.tools)) raw.push(...res.tools);
+    const next = typeof res?.nextCursor === 'string' && res.nextCursor ? res.nextCursor : undefined;
+    if (!next) return { ...splitRawTools({ tools: raw }), loop };
+    if (seen.has(next)) {
+      loop = true;
+      break;
+    }
+    seen.add(next);
+    cursor = next;
+  }
+  return { ...splitRawTools({ tools: raw }), loop: true };
+}
+
 export function splitRawTools(raw: any): { tools: Tool[]; broken: { name: string; problem: string }[] } {
   const tools: Tool[] = [];
   const broken: { name: string; problem: string }[] = [];
@@ -181,16 +236,32 @@ export function splitRawTools(raw: any): { tools: Tool[]; broken: { name: string
     const name = typeof t?.name === 'string' && t.name ? t.name : '(no name)';
     if (name === '(no name)') broken.push({ name, problem: 'has no name' });
     else if (!t.inputSchema || typeof t.inputSchema !== 'object') broken.push({ name, problem: 'has no input definition (inputSchema), which MCP requires on every tool' });
-    else tools.push(t as Tool);
+    else {
+      // Exactly the rules the official client applies to each tool.
+      const issue = toolIssue(t);
+      if (issue) broken.push({ name, problem: `doesn't match the MCP tool format (${issue})` });
+      else tools.push(t as Tool);
+    }
   }
   return { tools, broken };
 }
 
-function toolListCheck(tools: Tool[], broken: { name: string; problem: string }[] = []): CheckResult {
+function toolIssue(t: unknown): string | undefined {
+  const result: any = (specTypeSchemas as any).Tool['~standard'].validate(t);
+  if (!result?.issues?.length) return undefined;
+  const i = result.issues[0];
+  const where = (i.path ?? []).map((p: any) => (typeof p === 'object' ? p.key : p)).join('.');
+  return `${where ? where + ': ' : ''}${i.message}`;
+}
+
+function toolListCheck(tools: Tool[], broken: { name: string; problem: string }[] = [], loop = false, sdkProblem?: string): CheckResult {
   const findings: Finding[] = [];
+  if (loop) findings.push({ status: 'warn', message: 'The tool list keeps pointing to the same next page, so it never ends. We stopped after the pages we had already seen.' });
+  if (sdkProblem) findings.push({ status: 'fail', message: sdkProblem });
   for (const b of broken)
     findings.push({ status: 'fail', tool: b.name, message: `Breaks the tool list: ${b.problem}. AI apps may refuse to load this whole server because of it. We tested the other tools anyway.` });
-  if (!tools.length) return check('tools', 'Lists its tools', 10, [...findings, { status: 'fail', message: 'The server has no usable tools' }]);
+  if (!tools.length && broken.length) return check('tools', 'Lists its tools', 10, [...findings, { status: 'fail', message: 'None of its tools can be used' }]);
+  if (!tools.length) return check('tools', 'Lists its tools', 10, [...findings, { status: 'warn', message: 'Has the tools feature, but offers no tools right now' }]);
   findings.push({ status: 'pass', message: `Found ${tools.length + broken.length} tool${tools.length + broken.length === 1 ? '' : 's'}` });
 
   const seen = new Set<string>();
@@ -203,16 +274,26 @@ function toolListCheck(tools: Tool[], broken: { name: string; problem: string }[
   return check('tools', 'Lists its tools', 10, findings);
 }
 
+// An input counts as described if it, or the shared definition it points to ($ref), has a description.
+function describedInput(prop: any, root: any, depth = 0): boolean {
+  if (prop?.description?.trim()) return true;
+  const ref = typeof prop?.$ref === 'string' && prop.$ref.startsWith('#/') ? prop.$ref : undefined;
+  if (!ref || depth > 5) return false;
+  const target = ref.slice(2).split('/').reduce((o: any, k: string) => o?.[k.replace(/~1/g, '/').replace(/~0/g, '~')], root);
+  return describedInput(target, root, depth + 1);
+}
+
 function descriptionCheck(tools: Tool[]): CheckResult {
   const findings: Finding[] = [];
   for (const t of tools) {
     const desc = t.description?.trim() ?? '';
     if (!desc) findings.push({ status: 'fail', tool: t.name, message: 'Has no description, so the AI has to guess what it does' });
-    else if (desc.length < 20) findings.push({ status: 'warn', tool: t.name, message: `Description is very short (${desc.length} characters)` });
+    // CJK scripts say in 1 character what English says in a word, so they get a lower bar.
+    else if (desc.length < (/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(desc) ? 8 : 20)) findings.push({ status: 'warn', tool: t.name, message: `Description is very short (${desc.length} characters)` });
     else if (desc.length > 4000) findings.push({ status: 'warn', tool: t.name, message: `Description is very long (${desc.length} characters), which uses up the AI's memory` });
 
     const props: Record<string, any> = (t.inputSchema as any)?.properties ?? {};
-    const undocumented = Object.keys(props).filter((k) => !props[k]?.description?.trim());
+    const undocumented = Object.keys(props).filter((k) => !describedInput(props[k], t.inputSchema));
     if (undocumented.length) findings.push({ status: 'warn', tool: t.name, message: `Inputs with no description: ${undocumented.join(', ')}` });
     const vague = vagueDescription(t);
     if (vague) findings.push({ status: 'warn', tool: t.name, message: `Description ${vague}: "${t.description!.trim().slice(0, 80)}"` });
@@ -269,12 +350,13 @@ function toolsRespondCheck(calls: ToolCallRecord[], ran: number, skipped: Report
   for (const c of good) {
     const h = hollow.get(c.tool);
     if (c.outcome === 'ok' && h) findings.push({ status: h.serious ? 'fail' : 'warn', tool: c.tool, message: `Answered, but it ${h.reason}` });
+    else if (c.outcome === 'ok' && c.text.length > BIG_ANSWER) findings.push({ status: 'warn', tool: c.tool, message: `Answered with about ${Math.round(c.text.length / 1000)} KB of text. Many AI apps cut off tool answers this big, so the AI may never see the end of it.` });
     else if (c.outcome === 'ok') findings.push({ status: 'pass', tool: c.tool, message: `Worked (${fmtMs(c.ms)})` });
     else if (c.outcome === 'tool-error' || c.outcome === 'protocol-error') findings.push({ status: 'pass', tool: c.tool, message: `Answered with an error, probably because of our sample input: ${short(c.text)}` });
     else if (c.outcome === 'timeout') findings.push({ status: 'fail', tool: c.tool, message: `No answer within the time limit` });
     else if (c.outcome === 'needs-login') findings.push({ status: 'skip', tool: c.tool, message: 'Needs you to sign in, so it was not tested (not counted against the server)' });
     else if (c.outcome === 'rate-limited') findings.push({ status: 'skip', tool: c.tool, message: 'The server limited our requests (HTTP 429), so it was not tested (not counted against the server)' });
-    else if (c.outcome === 'unclear') findings.push({ status: 'skip', tool: c.tool, message: `Got an error we could not interpret, so it was not counted: ${short(c.text)}` });
+    else if (c.outcome === 'unclear') findings.push({ status: 'skip', tool: c.tool, message: c.reason ? `Not tested: ${c.reason}` : `Got an error we could not interpret, so it was not counted: ${short(c.text)}` });
     else if (c.outcome === 'unavailable') findings.push({ status: 'warn', tool: c.tool, message: 'The server said it was temporarily unavailable (HTTP 503)' });
     else if (c.outcome === 'bad-reply') findings.push({ status: 'fail', tool: c.tool, message: `Its reply breaks the MCP rules, so AI apps can't read it: ${c.reason}` });
     else findings.push({ status: 'fail', tool: c.tool, message: `Crashed: ${c.reason ?? short(c.text)}` });
@@ -297,7 +379,7 @@ function badInputCheck(calls: ToolCallRecord[], ran: number): CheckResult {
     else if (c.outcome === 'timeout') findings.push({ status: 'fail', tool: c.tool, message: `Hung on ${what}` });
     else if (c.outcome === 'needs-login') findings.push({ status: 'skip', tool: c.tool, message: 'Needs you to sign in, so bad inputs were not tested' });
     else if (c.outcome === 'rate-limited') findings.push({ status: 'skip', tool: c.tool, message: 'The server limited our requests, so bad inputs were not tested' });
-    else if (c.outcome === 'unclear') findings.push({ status: 'skip', tool: c.tool, message: 'Got errors we could not interpret, so bad inputs were not counted' });
+    else if (c.outcome === 'unclear') findings.push({ status: 'skip', tool: c.tool, message: c.reason ? `Bad inputs not tested: ${c.reason}` : 'Got errors we could not interpret, so bad inputs were not counted' });
     else if (c.outcome === 'unavailable') findings.push({ status: 'warn', tool: c.tool, message: `Said it was temporarily unavailable (HTTP 503) on ${what}` });
     else if (c.outcome === 'bad-reply') findings.push({ status: 'fail', tool: c.tool, message: `Broke the MCP rules on ${what}: ${c.reason}` });
     else findings.push({ status: 'fail', tool: c.tool, message: `Crashed on ${what}` });
@@ -364,7 +446,12 @@ async function callTool(client: Client, tool: Tool, why: ToolCallRecord['why'], 
   const started = Date.now();
   try {
     const result = await client.callTool({ name: tool.name, arguments: args }, { timeout: timeoutMs });
-    return { tool: tool.name, why, kind, arguments: args, ms: Date.now() - started, outcome: result.isError ? 'tool-error' : 'ok', text: resultText(result) };
+    const ms = Date.now() - started;
+    if (!result.isError && kind === 'good-input') {
+      const broke = await outputSchemaProblem(tool, result);
+      if (broke) return { tool: tool.name, why, kind, arguments: args, ms, outcome: 'bad-reply', text: resultText(result), reason: broke };
+    }
+    return { tool: tool.name, why, kind, arguments: args, ms, outcome: result.isError ? 'tool-error' : 'ok', text: resultText(result) };
   } catch (err) {
     // A failure needs evidence: see classifyError. Unknown errors are "unclear", never a crash.
     const e = classifyError(err);
@@ -384,6 +471,23 @@ async function callTool(client: Client, tool: Tool, why: ToolCallRecord['why'], 
         return { ...base, outcome: e.kind, text: e.text };
     }
   }
+}
+
+// The spec: if a tool declares an outputSchema, its structured result MUST conform to it.
+async function outputSchemaProblem(tool: Tool, result: any): Promise<string | undefined> {
+  const schema = (tool as any).outputSchema;
+  if (!schema || typeof schema !== 'object') return undefined;
+  if (result.structuredContent === undefined) return 'it promised a structured answer (outputSchema) but sent none';
+  let validator;
+  try {
+    validator = fromJsonSchema(schema);
+  } catch {
+    return undefined; // a schema we can't read is reported with the descriptions, not here
+  }
+  const v: any = await validator['~standard'].validate(result.structuredContent);
+  if (!v?.issues?.length) return undefined;
+  const words = v.issues.slice(0, 2).map((i: any) => String(i.message).replace(/^data\/?/, '').replace(/^\s+/, '')).join('; ');
+  return `its structured answer doesn't match its own output schema (${words})`;
 }
 
 function resultText(result: any): string {
@@ -412,7 +516,12 @@ export function toolListError(raw: string): string {
   return `Asking for the tool list failed: ${short(raw, 160)}`;
 }
 
-function explainConnectError(err: unknown): string {
+function explainConnectError(err: unknown, isProgram = false): string {
+  const said = (err as any)?.programOutput as string | undefined;
+  if (isProgram && said) return `The program stopped before it could connect. Its last message: "${said}"`;
+  if (isProgram && /Connection closed|ENOENT|spawn/i.test(errText(err))) return 'The program stopped before it could connect, without saying why. Check the command runs on its own.';
+  const version = errText(err).match(/protocol version is not supported:\s*(\S+)/i)?.[1];
+  if (version) return `The server answered with MCP version "${version}", which AI apps don't support, so they refuse to connect.`;
   const status = (err as any)?.data?.status ?? (err as any)?.status;
   if (err instanceof SdkError && err.code === SdkErrorCode.ClientHttpAuthentication || status === 401) return 'The server needs a login key. Add it and test again.';
   if (err instanceof SdkError && err.code === SdkErrorCode.ClientHttpForbidden || status === 403) return 'The server refused access (403). Check the key has the right permissions.';

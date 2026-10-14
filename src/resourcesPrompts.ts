@@ -22,8 +22,7 @@ const INTERNAL_ERROR = -32603;
 // Descriptions: the same tricks as in tool descriptions, except that mentioning a secrets file
 // only counts with an action ("read ~/.ssh/id_rsa"). A file that is simply named ".env.example"
 // is not a trick (real Hugging Face case).
-const ASKS_FOR_SECRETS = { name: 'asks the AI to read SSH keys or .env files', re: /\b(?:read|send|include|upload|attach|cat|open|copy|paste|share)\b[^.\n]{0,40}(?:~\/\.ssh|id_rsa|\.env\b|credentials\.json)/i };
-const DESC_PATTERNS = [...HIDDEN_INSTRUCTION_PATTERNS.filter((p) => !/SSH keys/.test(p.name)), ASKS_FOR_SECRETS];
+const DESC_PATTERNS = HIDDEN_INSTRUCTION_PATTERNS;
 // Content (documents, code, web pages, other languages) is noisier: only the unmistakable tricks.
 // Not ".env" (code says "c.env.TOKEN", real Cloudflare case) and not ordinary zero-width characters
 // (written Persian uses them, real OpenZeppelin case); only the invisible "tag" characters that

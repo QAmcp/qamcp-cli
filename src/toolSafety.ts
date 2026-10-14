@@ -103,6 +103,8 @@ export function decideRun(tool: Tool, mode: SafetyMode): RunDecision {
   if (a?.destructiveHint === true) return { run: false, why: 'labeled dangerous' };
   if (looksDestructive(tool.name)) return { run: false, why: 'name sounds like it deletes something' };
   if (a?.readOnlyHint === false) return { run: false, why: 'labeled as changing data' };
+  // The spec says such a tool MUST be called as a task; a normal call is refused by design.
+  if ((tool as any).execution?.taskSupport === 'required') return { run: false, why: 'can only run as a background task (task mode), which QAmcp does not test yet' };
   if (mode === 'all') return { run: true, why: a?.readOnlyHint === true ? 'labeled read-only' : 'owner allowed' };
 
   if (a?.readOnlyHint === true) {

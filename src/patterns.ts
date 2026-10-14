@@ -26,13 +26,23 @@ export function allMatches(text: string, patterns: { name: string; re: RegExp }[
   return patterns.filter((p) => p.re.test(text)).map((p) => p.name);
 }
 
+const SECRET_FILE = String.raw`(?:~\/\.ssh|id_rsa|\.env\b|credentials\.json)`;
+const SEND = String.raw`\b(?:pass|send|include|upload|attach|paste|share|provide|forward|post|give)\b`;
+const SECRET_EXFIL = new RegExp(`${SECRET_FILE}[^\n]{0,80}?${SEND}|${SEND}[^\n]{0,80}?${SECRET_FILE}`, 'i');
+const INVISIBLE = /[\u{E0000}-\u{E007F}]|[\u202A-\u202E\u2066-\u2069]|[\u200B\u2060-\u2064]|(?<=\S)\uFEFF|(?<=[A-Za-z])[\u200C\u200D](?=[A-Za-z])/u;
+
 // Text in a tool description that tries to steer the AI behind the user's back.
 export const HIDDEN_INSTRUCTION_PATTERNS: { name: string; re: RegExp }[] = [
   { name: '"ignore previous instructions"', re: /ignore (?:all |any )?(?:previous|prior|above|earlier) instructions/i },
   { name: 'hidden <IMPORTANT> block', re: /<\s*important\s*>/i },
   { name: '"don\'t tell the user"', re: /(?:do not|don't|never) (?:tell|mention|inform|reveal|show)[^.]{0,30}\buser\b/i },
-  { name: 'asks for SSH keys or .env files', re: /(?:~\/\.ssh|id_rsa|\.env\b|credentials\.json)/i },
-  { name: 'invisible characters', re: /[​-‏‪-‮⁠-⁤﻿]|[\u{E0000}-\u{E007F}]/u },
+  // Asking the AI to pass a secrets file somewhere. Merely naming .env or ~/.ssh is not a trick:
+  // developer tools do that all the time ("list the names in your .env file").
+  { name: 'asks the AI to send secrets (SSH keys, .env files)', re: SECRET_EXFIL },
+  // Characters that hide text from people. Not the joiners that emoji and many scripts need
+  // (👨‍👩‍👧, Persian, Hindi): only tag characters, direction overrides, and zero-width
+  // characters wedged inside English words.
+  { name: 'invisible characters', re: INVISIBLE },
 ];
 
 // The tool name rule from the MCP spec: 1-128 characters, letters, digits, _ - .

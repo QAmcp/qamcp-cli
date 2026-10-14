@@ -49,6 +49,7 @@ export interface Report {
   server?: { name?: string; version?: string };
   protocol?: { era?: string; version?: string; transport: 'streamable-http' | 'sse' | 'stdio' };
   toolCount: number;
+  offersTools?: boolean; // false when the server has no "tools" feature at all
   // How much we could actually test. A score is only as good as its coverage.
   coverage: { checksRun: number; checksTotal: number; toolsRun: number; toolsTotal: number };
   skippedTools: { tool: string; why: string }[];

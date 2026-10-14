@@ -33,6 +33,10 @@ export function classifyError(err: unknown): ClassifiedError {
   const status = httpStatus(err);
 
   if (err instanceof SdkError && err.code === SdkErrorCode.RequestTimeout) return { kind: 'timeout', status, text: '', message: '' };
+  // The official client raises these itself, as protocol errors, when a reply breaks the tool's
+  // own output promise. That is the server breaking a MUST, not the server saying "no".
+  if (/has an output schema but did not return structured content|Structured content does not match the tool's output schema/i.test(text))
+    return { kind: 'bad-reply', status, text, message: '' };
   if (err instanceof ProtocolError) return { kind: 'refused', status, text, message: err.message };
 
   if (status === 401 || status === 403) return { kind: 'needs-login', status, text, message: '' };
@@ -45,7 +49,9 @@ export function classifyError(err: unknown): ClassifiedError {
   if (status !== undefined && REFUSED_STATUS.has(status)) return { kind: 'refused', status, text, message: '' };
   if (status === undefined && SIGN_IN.test(text)) return { kind: 'needs-login', status, text, message: '' };
 
-  if (/Invalid result for|is not valid JSON|Unexpected end of JSON|Unexpected token|Unexpected content type|Invalid JSON/i.test(text))
+  // Replies the official client refuses because they break the rules, including a tool's own
+  // output promise (outputSchema), which the spec says it MUST keep.
+  if (/Invalid result for|is not valid JSON|Unexpected end of JSON|Unexpected token|Unexpected content type|Invalid JSON|has an output schema but did not return structured content|Structured content does not match the tool's output schema/i.test(text))
     return { kind: 'bad-reply', status, text, message: '' };
   if (/fetch failed|ECONNRESET|socket hang up|other side closed|ECONNREFUSED|EPIPE|terminated|Connection closed/i.test(text))
     return { kind: 'dropped', status, text, message: '' };
@@ -54,6 +60,9 @@ export function classifyError(err: unknown): ClassifiedError {
 
 // Plain words for a reply that broke the MCP rules.
 export function badReplyWords(text: string): string {
+  if (/has an output schema but did not return structured content/i.test(text)) return 'it promised a structured answer (outputSchema) but sent none';
+  const mismatch = text.match(/Structured content does not match the tool's output schema:\s*(.*)$/i);
+  if (mismatch) return `its structured answer doesn't match its own output schema (${mismatch[1].replace(/data\/?/g, '').trim()})`;
   if (/Unexpected content type: text\/html/i.test(text)) return 'it sent a web page instead of an MCP reply';
   if (/Unexpected end of JSON/i.test(text)) return 'it sent an empty reply';
   if (/is not valid JSON|Unexpected token|Invalid JSON/i.test(text)) return 'its reply is not valid JSON';
