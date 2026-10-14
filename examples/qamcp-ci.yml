@@ -1,0 +1,50 @@
+# Copy this file to .github/workflows/qamcp.yml in YOUR repository.
+# It tests your MCP server on every pull request, comments the result, and fails the
+# pull request if the score drops or a check gets worse.
+name: QAmcp
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write # to comment the result
+
+jobs:
+  qamcp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Start your server here if it runs inside CI, e.g.:
+      # - run: npm ci && npm run build && (node dist/server.js &) && sleep 3
+
+      # Keep the last report between runs, to compare with.
+      - uses: actions/cache@v4
+        with:
+          path: qamcp-baseline.json
+          key: qamcp-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            qamcp-${{ github.ref_name }}-
+            qamcp-main-
+
+      - uses: abhiramreddykalluru01-debug/qamcp-cli@v0
+        with:
+          url: https://your-server.example.com/mcp
+          # stdio: npx -y @your-org/your-mcp-server   # or test a program instead of a link
+          headers: |
+            Authorization: Bearer ${{ secrets.MCP_TEST_TOKEN }}
+          fail-under: 80
+          baseline: qamcp-baseline.json
+          save-baseline: qamcp-baseline.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qamcp-report
+          path: |
+            qamcp-junit.xml
+            qamcp-report.md
+            qamcp-report.json

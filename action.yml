@@ -1,0 +1,145 @@
+name: QAmcp
+description: "Test an MCP server on every change. Fails the build when the score drops or a check gets worse, and comments the result on the pull request."
+author: QAmcp
+branding:
+  icon: check-circle
+  color: gray-dark
+
+inputs:
+  url:
+    description: "Link to the MCP server to test (use this or `stdio`)."
+    required: false
+    default: ''
+  stdio:
+    description: "A command that starts the server as a program, e.g. `npx -y @acme/mcp-server` (use this or `url`)."
+    required: false
+    default: ''
+  headers:
+    description: "Headers to send, one `Name: value` per line. Put keys in repository secrets."
+    required: false
+    default: ''
+  fail-under:
+    description: "Fail if the score is below this number."
+    required: false
+    default: ''
+  fail-on-fail:
+    description: "Fail if any check failed (`true` or `false`)."
+    required: false
+    default: 'false'
+  baseline:
+    description: "Path to a saved report to compare with (a missing file is fine on the first run)."
+    required: false
+    default: ''
+  max-drop:
+    description: "How many points the score may fall below the baseline."
+    required: false
+    default: '5'
+  save-baseline:
+    description: "Path to save this run's report as the next baseline."
+    required: false
+    default: ''
+  timeout:
+    description: "Seconds allowed per request."
+    required: false
+    default: '20'
+  comment:
+    description: "Comment the result on pull requests (needs `pull-requests: write`)."
+    required: false
+    default: 'true'
+  junit:
+    description: "Where to write the JUnit XML report."
+    required: false
+    default: qamcp-junit.xml
+  markdown:
+    description: "Where to write the markdown report."
+    required: false
+    default: qamcp-report.md
+  json:
+    description: "Where to write the full JSON report."
+    required: false
+    default: qamcp-report.json
+  extra-args:
+    description: "Any other command-line options, as one line."
+    required: false
+    default: ''
+
+outputs:
+  score:
+    description: "The score, 0 to 100."
+    value: ${{ steps.run.outputs.score }}
+  gate:
+    description: '`passed`, `failed` or `not-tested`.'
+    value: ${{ steps.run.outputs.gate }}
+  tools-changed:
+    description: '`true` if any tool was added, removed or changed since the baseline.'
+    value: ${{ steps.run.outputs.tools-changed }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - name: Install QAmcp
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci --no-audit --no-fund --loglevel=error
+
+    # Inputs go in through environment variables, never pasted into the script, so a
+    # crafted input can't inject commands.
+    - name: Run QAmcp
+      id: run
+      shell: bash
+      env:
+        IN_URL: ${{ inputs.url }}
+        IN_STDIO: ${{ inputs.stdio }}
+        IN_HEADERS: ${{ inputs.headers }}
+        IN_FAIL_UNDER: ${{ inputs.fail-under }}
+        IN_FAIL_ON_FAIL: ${{ inputs.fail-on-fail }}
+        IN_BASELINE: ${{ inputs.baseline }}
+        IN_MAX_DROP: ${{ inputs.max-drop }}
+        IN_SAVE_BASELINE: ${{ inputs.save-baseline }}
+        IN_TIMEOUT: ${{ inputs.timeout }}
+        IN_JUNIT: ${{ inputs.junit }}
+        IN_MARKDOWN: ${{ inputs.markdown }}
+        IN_JSON: ${{ inputs.json }}
+        IN_EXTRA: ${{ inputs.extra-args }}
+      run: |
+        args=()
+        if [ -n "$IN_URL" ]; then args+=("$IN_URL"); fi
+        if [ -n "$IN_STDIO" ]; then args+=(--stdio "$IN_STDIO"); fi
+        while IFS= read -r line; do
+          line="${line%$'\r'}"
+          if [ -n "$line" ]; then args+=(--header "$line"); fi
+        done <<< "$IN_HEADERS"
+        if [ -n "$IN_FAIL_UNDER" ]; then args+=(--fail-under "$IN_FAIL_UNDER"); fi
+        if [ "$IN_FAIL_ON_FAIL" = "true" ]; then args+=(--fail-on-fail); fi
+        if [ -n "$IN_BASELINE" ]; then args+=(--baseline "$IN_BASELINE" --max-drop "$IN_MAX_DROP"); fi
+        if [ -n "$IN_SAVE_BASELINE" ]; then args+=(--save-baseline "$IN_SAVE_BASELINE"); fi
+        args+=(--timeout "$IN_TIMEOUT" --junit "$IN_JUNIT" --markdown "$IN_MARKDOWN" --json "$IN_JSON")
+        if [ -n "$IN_EXTRA" ]; then read -r -a extra <<< "$IN_EXTRA"; args+=("${extra[@]}"); fi
+        "${{ github.action_path }}/node_modules/.bin/tsx" "${{ github.action_path }}/src/cli.ts" "${args[@]}"
+
+    - name: Comment on the pull request
+      if: always() && inputs.comment == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      env:
+        QAMCP_MARKDOWN: ${{ inputs.markdown }}
+      with:
+        script: |
+          const fs = require('fs');
+          const file = process.env.QAMCP_MARKDOWN;
+          if (!fs.existsSync(file)) { core.warning('No QAmcp report to comment.'); return; }
+          const marker = '<!-- qamcp-report -->';
+          const body = marker + '\n' + fs.readFileSync(file, 'utf8');
+          try {
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const mine = comments.find((c) => c.body && c.body.includes(marker));
+            if (mine) await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
+            else await github.rest.issues.createComment({ owner, repo, issue_number, body });
+          } catch (e) {
+            core.warning('Could not comment on the pull request (pull requests from forks cannot): ' + e.message);
+          }
