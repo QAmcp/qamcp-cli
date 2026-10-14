@@ -16,13 +16,13 @@ jobs:
   qamcp:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Start your server here if it runs inside CI, e.g.:
       # - run: npm ci && npm run build && (node dist/server.js &) && sleep 3
 
       # Keep the last report between runs, to compare with.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: qamcp-baseline.json
           key: qamcp-${{ github.ref_name }}-${{ github.sha }}
@@ -40,7 +40,7 @@ jobs:
           baseline: qamcp-baseline.json
           save-baseline: qamcp-baseline.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: qamcp-report

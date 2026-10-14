@@ -147,7 +147,7 @@ jobs:
   qamcp:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: abhiramreddykalluru01-debug/qamcp-cli@v0
         with:
           url: https://your-server.com/mcp

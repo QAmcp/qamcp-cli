@@ -14,11 +14,17 @@ permissions:
 
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    # The package promises Node 20 or newer: prove it on every supported line.
+    strategy:
+      matrix:
+        node: [20, 22, 24]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm }
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm test
@@ -30,9 +36,9 @@ jobs:
           if grep -E " (src|test)/|\.env" pack.txt; then echo "the package contains files it should not"; exit 1; fi
 
   action-link:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Test a public server with the Action
         id: qamcp
         uses: ./
@@ -58,9 +64,9 @@ jobs:
           test "${{ steps.again.outputs.tools-changed }}" = "false"
 
   action-gate-fails:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: An impossible bar must fail the build
         id: bar
         continue-on-error: true
@@ -74,9 +80,9 @@ jobs:
           test "${{ steps.bar.outputs.gate }}" = "failed"
 
   action-stdio:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Test a program, not a link
         id: s
         uses: ./
@@ -87,9 +93,9 @@ jobs:
       - run: test -n "${{ steps.s.outputs.score }}"
 
   docker:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: docker build -t qamcp .
       - name: --help works and runs as a normal user
         run: |
