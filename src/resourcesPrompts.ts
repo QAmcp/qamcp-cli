@@ -6,7 +6,8 @@
 // reads), so this is safe on any server. We sample when there are many.
 
 import { randomBytes } from 'node:crypto';
-import { ProtocolError, SdkError, SdkErrorCode, UriTemplate, type Client } from '@modelcontextprotocol/client';
+import { ProtocolError, UriTemplate, type Client } from '@modelcontextprotocol/client';
+import { badReplyWords, classifyError, errorText, type ClassifiedError, type ErrorKind } from './errorKind.js';
 import { allMatches, firstMatch, HIDDEN_INSTRUCTION_PATTERNS, INTERNAL_PATTERNS, SECRET_PATTERNS } from './patterns.js';
 import type { CheckResult, Finding, Status } from './types.js';
 
@@ -57,7 +58,9 @@ export async function checkResourcesAndPrompts(client: Client, timeoutMs: number
     try {
       resources = await listAll((cursor) => client.listResources(cursor ? { cursor } : undefined, opts), 'resources');
     } catch (err) {
-      add('fail', `Says it has resources, but listing them failed: ${errShort(err)}`);
+      const e = classifyError(err);
+      if (NOT_COUNTED[e.kind]) add('skip', `Could not list resources: ${NOT_COUNTED[e.kind]}`);
+      else add('fail', `Says it has resources, but listing them failed: ${errShort(err)}`);
     }
     try {
       templates = await listAll((cursor) => client.listResourceTemplates(cursor ? { cursor } : undefined, opts), 'resourceTemplates');
@@ -86,6 +89,7 @@ export async function checkResourcesAndPrompts(client: Client, timeoutMs: number
     const sample = resources.filter((r) => typeof r?.uri === 'string').slice(0, MAX_READS);
     let slowest = { uri: '', ms: 0 };
     let readOk = 0;
+    let notChecked = 0;
     for (const r of sample) {
       stats.read++;
       const t0 = Date.now();
@@ -107,16 +111,24 @@ export async function checkResourcesAndPrompts(client: Client, timeoutMs: number
         // Content can come from anywhere (docs, user data), so this is a warning, not proof of bad intent.
         if (hidden) add('warn', `The content contains ${hidden}. If an AI reads this, it may follow it. Check where this text comes from.`, r.uri);
       } catch (err) {
-        if (isTimeout(err)) add('fail', 'Listed, but opening it never answered.', r.uri);
-        else if (code(err) === INTERNAL_ERROR) add('fail', `Listed, but opening it crashed: ${errShort(err)}`, r.uri);
-        else if (isInvalidReply(err)) add('fail', `Its reply breaks the MCP rules, so AI apps reject it: ${plainInvalid(err)}`, r.uri);
-        else add('fail', `Listed, but opening it fails: ${errShort(err)}`, r.uri);
+        // A failure needs evidence (see classifyError): unknown errors are not counted.
+        const e = classifyError(err);
+        if (NOT_COUNTED[e.kind]) {
+          notChecked++;
+          add('skip', `Not checked: ${NOT_COUNTED[e.kind]}`, r.uri);
+        } else if (e.kind === 'unavailable') add('warn', 'Listed, but the server said it was temporarily unavailable (HTTP 503).', r.uri);
+        else if (e.kind === 'timeout') add('fail', 'Listed, but opening it never answered.', r.uri);
+        else if (e.kind === 'bad-reply') add('fail', `Its reply breaks the MCP rules, so AI apps reject it: ${badReplyWords(e.text)}`, r.uri);
+        else if (e.kind === 'server-error' || e.kind === 'dropped' || code(err) === INTERNAL_ERROR) add('fail', `Listed, but opening it crashed: ${brokeWords(e, err)}`, r.uri);
+        else add('fail', `Listed, but opening it is refused: ${errShort(err)}`, r.uri);
         leakFindings(errText(err), r.uri, add);
       }
     }
-    if (sample.length) {
+    const checked = sample.length - notChecked;
+    if (checked > 0) {
       const of = resources.length > sample.length ? ` (a sample of ${sample.length} of ${resources.length})` : '';
-      add(readOk === sample.length ? 'pass' : 'warn', `Opened ${readOk} of ${sample.length} resources${of}`);
+      const skipped = notChecked ? `; ${notChecked} could not be checked` : '';
+      add(readOk === checked ? 'pass' : 'warn', `Opened ${readOk} of ${checked} resources${of}${skipped}`);
       if (slowest.ms > SLOW_MS) add('warn', `Slowest resource took ${(slowest.ms / 1000).toFixed(1)} s to open`, slowest.uri);
     }
 
@@ -134,8 +146,12 @@ export async function checkResourcesAndPrompts(client: Client, timeoutMs: number
         await client.readResource({ uri }, opts);
         add('pass', `Filling in the pattern and opening it works (${uri})`, t.uriTemplate);
       } catch (err) {
-        if (isTimeout(err)) add('fail', `Opening a filled-in address (${uri}) never answered.`, t.uriTemplate);
-        else if (code(err) === INTERNAL_ERROR) add('warn', `A made-up value (${uri}) gets an internal error instead of a clean "not found": ${errShort(err)}`, t.uriTemplate);
+        const e = classifyError(err);
+        if (NOT_COUNTED[e.kind]) add('skip', `Not checked: ${NOT_COUNTED[e.kind]}`, t.uriTemplate);
+        else if (e.kind === 'timeout') add('fail', `Opening a filled-in address (${uri}) never answered.`, t.uriTemplate);
+        else if (e.kind === 'bad-reply') add('fail', `Opening a filled-in address (${uri}) gets a reply that breaks the MCP rules: ${badReplyWords(e.text)}`, t.uriTemplate);
+        else if (e.kind === 'dropped') add('fail', `Opening a filled-in address (${uri}) cut the connection.`, t.uriTemplate);
+        else if (e.kind === 'server-error' || e.kind === 'unavailable' || code(err) === INTERNAL_ERROR) add('warn', `A made-up value (${uri}) gets an internal error instead of a clean "not found": ${brokeWords(e, err)}`, t.uriTemplate);
         else add('pass', `A made-up value gets a clean error (${uri})`, t.uriTemplate);
         leakFindings(errText(err), t.uriTemplate, add);
       }
@@ -151,8 +167,12 @@ export async function checkResourcesAndPrompts(client: Client, timeoutMs: number
         if (has) add('warn', `Opening an address that doesn't exist (${missing}) returns content instead of a "not found" error, so AI apps can't tell a typo from real data.`);
         else add('pass', 'An address that does not exist gets an empty answer, not a crash');
       } catch (err) {
-        if (isTimeout(err)) add('fail', `Opening an address that doesn't exist never answered (${missing}).`);
-        else if (code(err) === INTERNAL_ERROR) add('warn', `Opening an address that doesn't exist crashes the request instead of saying "not found": ${errShort(err)}`);
+        const e = classifyError(err);
+        if (NOT_COUNTED[e.kind]) add('skip', `An address that doesn't exist was not checked: ${NOT_COUNTED[e.kind]}`);
+        else if (e.kind === 'timeout') add('fail', `Opening an address that doesn't exist never answered (${missing}).`);
+        else if (e.kind === 'bad-reply') add('fail', `Opening an address that doesn't exist gets a reply that breaks the MCP rules: ${badReplyWords(e.text)}`);
+        else if (e.kind === 'dropped') add('fail', `Opening an address that doesn't exist cut the connection (${missing}).`);
+        else if (e.kind === 'server-error' || e.kind === 'unavailable' || code(err) === INTERNAL_ERROR) add('warn', `Opening an address that doesn't exist crashes the request instead of saying "not found": ${brokeWords(e, err)}`);
         else add('pass', 'An address that does not exist gets a clean "not found" error');
         leakFindings(errText(err), missing, add);
       }
@@ -165,7 +185,9 @@ export async function checkResourcesAndPrompts(client: Client, timeoutMs: number
     try {
       prompts = await listAll((cursor) => client.listPrompts(cursor ? { cursor } : undefined, opts), 'prompts');
     } catch (err) {
-      add('fail', `Says it has prompts, but listing them failed: ${errShort(err)}`);
+      const e = classifyError(err);
+      if (NOT_COUNTED[e.kind]) add('skip', `Could not list prompts: ${NOT_COUNTED[e.kind]}`);
+      else add('fail', `Says it has prompts, but listing them failed: ${errShort(err)}`);
     }
     stats.prompts = prompts.length;
 
@@ -180,6 +202,7 @@ export async function checkResourcesAndPrompts(client: Client, timeoutMs: number
     }
 
     let openedOk = 0;
+    let promptsNotChecked = 0;
     const sample = prompts.filter((p) => p?.name).slice(0, MAX_PROMPTS);
     for (const p of sample) {
       const args: { name: string; required?: boolean }[] = (p.arguments ?? []).filter((a: any) => typeof a?.name === 'string');
@@ -206,11 +229,18 @@ export async function checkResourcesAndPrompts(client: Client, timeoutMs: number
         const hidden = firstMatch(text, CONTENT_PATTERNS);
         if (hidden) add('warn', `The prompt text contains ${hidden}. Check this is meant to be there.`, p.name);
       } catch (err) {
-        if (isTimeout(err)) add('fail', 'Opening it never answered.', p.name);
+        const e = classifyError(err);
+        const internal = e.kind === 'server-error' || code(err) === INTERNAL_ERROR;
+        if (NOT_COUNTED[e.kind]) {
+          promptsNotChecked++;
+          add('skip', `Not checked: ${NOT_COUNTED[e.kind]}`, p.name);
+        } else if (e.kind === 'unavailable') add('warn', 'The server said it was temporarily unavailable (HTTP 503).', p.name);
+        else if (e.kind === 'timeout') add('fail', 'Opening it never answered.', p.name);
+        else if (e.kind === 'bad-reply') add('fail', `Its reply breaks the MCP rules, so AI apps reject it: ${badReplyWords(e.text)}`, p.name);
+        else if (e.kind === 'dropped') add('fail', 'Opening it cut the connection.', p.name);
         // With inputs, our sample values may simply be wrong for it: then it's the kind of error that's off, not a crash.
-        else if (code(err) === INTERNAL_ERROR && args.length) add('warn', `Our sample inputs get an internal error instead of an "invalid input" error: ${errShort(err)}`, p.name);
-        else if (code(err) === INTERNAL_ERROR) add('fail', `Opening it crashed: ${errShort(err)}`, p.name);
-        else if (isInvalidReply(err)) add('fail', `Its reply breaks the MCP rules, so AI apps reject it: ${plainInvalid(err)}`, p.name);
+        else if (internal && args.length) add('warn', `Our sample inputs get an internal error instead of an "invalid input" error: ${brokeWords(e, err)}`, p.name);
+        else if (internal) add('fail', `Opening it crashed: ${brokeWords(e, err)}`, p.name);
         else add('warn', `Could not open it with sample inputs: ${errShort(err)}`, p.name);
         leakFindings(errText(err), p.name, add);
         continue;
@@ -223,14 +253,19 @@ export async function checkResourcesAndPrompts(client: Client, timeoutMs: number
         await client.getPrompt({ name: p.name, arguments: {} }, opts);
         add('warn', `Doesn't complain when the required input ${required.map((a) => a.name).join(', ')} is missing.`, p.name);
       } catch (err) {
-        if (isTimeout(err)) add('fail', 'Leaving out a required input makes it hang.', p.name);
-        else if (code(err) === INTERNAL_ERROR) add('warn', `Leaving out a required input gets an internal error instead of an "invalid input" error: ${errShort(err)}`, p.name);
+        const e = classifyError(err);
+        if (e.kind === 'timeout') add('fail', 'Leaving out a required input makes it hang.', p.name);
+        else if (e.kind === 'dropped') add('fail', 'Leaving out a required input cuts the connection.', p.name);
+        else if (e.kind === 'bad-reply') add('fail', `Leaving out a required input gets a reply that breaks the MCP rules: ${badReplyWords(e.text)}`, p.name);
+        else if (e.kind === 'server-error' || code(err) === INTERNAL_ERROR) add('warn', `Leaving out a required input gets an internal error instead of an "invalid input" error: ${brokeWords(e, err)}`, p.name);
         leakFindings(errText(err), p.name, add);
       }
     }
-    if (sample.length) {
+    const promptsChecked = sample.length - promptsNotChecked;
+    if (promptsChecked > 0) {
       const of = prompts.length > sample.length ? ` (a sample of ${sample.length} of ${prompts.length})` : '';
-      add(openedOk === sample.length ? 'pass' : 'warn', `Opened ${openedOk} of ${sample.length} prompts${of}`);
+      const skipped = promptsNotChecked ? `; ${promptsNotChecked} could not be checked` : '';
+      add(openedOk === promptsChecked ? 'pass' : 'warn', `Opened ${openedOk} of ${promptsChecked} prompts${of}${skipped}`);
     }
   }
 
@@ -266,21 +301,24 @@ function leakFindings(text: string, where: string, add: (s: Status, m: string, t
 }
 
 const code = (err: unknown): number | undefined => (err instanceof ProtocolError ? (err as any).code : (err as any)?.code);
-const isTimeout = (err: unknown) => err instanceof SdkError && err.code === SdkErrorCode.RequestTimeout;
 const isMethodNotFound = (err: unknown) => code(err) === -32601;
-const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+const errText = errorText;
 const errShort = (err: unknown) => {
-  const t = errText(err).replace(/\s+/g, ' ').trim();
+  const t = (err instanceof Error ? err.message : String(err)).replace(/\s+/g, ' ').trim();
   return t.length > 140 ? t.slice(0, 139) + '…' : t || '(no message)';
 };
-// The SDK refuses replies that break the MCP rules ("Invalid result for prompts/get: [...]").
-const isInvalidReply = (err: unknown) => /Invalid result for/i.test(errText(err));
-function plainInvalid(err: unknown): string {
-  const t = errText(err);
-  if (/"user",\s*"assistant"/.test(t) && /role/.test(t)) return 'a message uses a role other than "user" or "assistant".';
-  const path = t.match(/"path":\s*\[([^\]]*)\]/)?.[1]?.replace(/[\s"]/g, '').replace(/,/g, '.');
-  const msg = t.match(/"message":\s*"([^"]+)"/)?.[1];
-  return [msg, path && `(at ${path})`].filter(Boolean).join(' ') || errShort(err);
+// Answers that mean we couldn't check something. Never counted against the server.
+const NOT_COUNTED: Partial<Record<ErrorKind, string>> = {
+  'needs-login': 'it needs sign-in',
+  'rate-limited': 'the server limited our requests (HTTP 429)',
+  unclear: 'we got an error we could not interpret',
+};
+// Plain words for an answer that proves something broke.
+function brokeWords(e: ClassifiedError, err: unknown): string {
+  if (e.kind === 'server-error') return `server error (HTTP ${e.status})`;
+  if (e.kind === 'unavailable') return 'temporarily unavailable (HTTP 503)';
+  if (e.kind === 'dropped') return 'the connection was cut';
+  return errShort(err);
 }
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function parsesAsJson(text: string): boolean {

@@ -27,7 +27,13 @@ export interface ToolCallRecord {
   why: RunReason; // why we were allowed to run it
   arguments: unknown;
   ms: number;
-  outcome: 'ok' | 'tool-error' | 'protocol-error' | 'timeout' | 'crash' | 'needs-login'; // needs-login: the tool asked us to sign in first
+  // ok / tool-error / protocol-error: the tool answered (an error here is a deliberate "no")
+  // timeout, crash (server error or dropped connection), bad-reply (broke the MCP rules): the tool failed
+  // needs-login, rate-limited, unclear: not really tested, so never counted against the server
+  // unavailable: the server said it was temporarily down
+  outcome: 'ok' | 'tool-error' | 'protocol-error' | 'timeout' | 'crash' | 'bad-reply' | 'needs-login' | 'rate-limited' | 'unavailable' | 'unclear';
+  status?: number; // HTTP status, when the tool call failed at the HTTP level
+  reason?: string; // plain words for a failure
   text: string; // everything the server sent back, flattened to text (used for the secrets scan)
   note?: string; // something unusual about how the server answered
 }
