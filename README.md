@@ -40,11 +40,11 @@ Privacy: nothing was sent anywhere except to the server being tested (and its lo
 ✅ Tools work with good inputs — All good
 ✅ Bad inputs give a clean error — All good
 ✅ Fast enough — All good
-     ✅ Connecting took 852 ms
-     ✅ Listing tools took 261 ms
-     ✅ Average tool answer: 1.1 s
+✅ Connecting took 852 ms
+✅ Listing tools took 261 ms
+✅ Average tool answer: 1.1 s
 ✅ No secrets leaked — All good
-     ✅ Checked 5 error messages: no secrets or internal details
+✅ Checked 5 error messages: no secrets or internal details
 ```
 
 ## What it checks
