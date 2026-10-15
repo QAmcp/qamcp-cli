@@ -20,7 +20,11 @@ export interface HtmlOptions {
 
 export function toHtml(r: Report, opts: HtmlOptions = {}): string {
   const verdict = verdictOf(r);
-  const items = r.checks.map((c, i) => ({ check: c, code: `T-${i + 1}` }));
+  const loginWall = r.notScored === 'needs a login';
+  // Behind a login wall, "Connects" didn't fail (we reached the server), and every check behind
+  // the wall is listed as not tested, so the page shows what a full test would cover.
+  const shown = loginWall ? [...r.checks.map((c) => (c.id === 'connect' ? reachedLogin(c) : c)), ...behindLogin(r)] : r.checks;
+  const items = shown.map((c, i) => ({ check: c, code: `T-${i + 1}` }));
   const codeOf = new Map(items.map((x) => [x.check, x.code]));
   const fails: Listed[] = [];
   const advisories: Listed[] = [];
@@ -39,7 +43,7 @@ export function toHtml(r: Report, opts: HtmlOptions = {}): string {
   const tested = r.testedAt ? new Date(r.testedAt) : undefined;
   const fields: [string, string][] = [
     ['Server', [r.server?.name, r.server?.version].filter(Boolean).join(' ') || 'Not reported'],
-    ['MCP version', r.protocol ? `${r.protocol.version ?? 'unknown'} · ${transportName(r.protocol.transport)}` : 'Could not connect'],
+    ['MCP version', r.protocol ? `${r.protocol.version ?? 'unknown'} · ${transportName(r.protocol.transport)}` : loginWall ? 'Behind the login' : 'Could not connect'],
     ['Tested', tested ? `${tested.toISOString().slice(0, 10)} · ${tested.toISOString().slice(11, 16)} UTC` : '–'],
     ['Safety mode', safetyWords(r.testedAs?.safety)],
     ['Logged in', r.testedAs?.loggedIn ? 'Yes, with your login' : 'No'],
@@ -63,7 +67,7 @@ export function toHtml(r: Report, opts: HtmlOptions = {}): string {
     <div class="label">Result</div>
     ${verdict.word === 'NOT SCORED' ? '' : `<div class="score"><span class="n">${r.score}</span><span class="of">/ 100</span></div>`}
     <div class="stamp ${verdict.cls}">${esc(verdict.word)}</div>
-    <div class="cov">${r.coverage.checksRun} of ${r.coverage.checksTotal} checks · ${r.coverage.toolsRun} of ${r.coverage.toolsTotal} tools run</div>
+    <div class="cov">${loginWall ? `Login setup checked · ${items.filter((x) => BEHIND.has(x.check)).length} checks behind the login` : `${r.coverage.checksRun} of ${r.coverage.checksTotal} checks · ${r.coverage.toolsRun} of ${r.coverage.toolsTotal} tools run`}</div>
     ${r.notScored ? `<p class="note">${notScoredHtml(r.notScored)}</p>` : ''}
     ${capNote(r)}
   </div>
@@ -77,8 +81,9 @@ export function toHtml(r: Report, opts: HtmlOptions = {}): string {
 <section class="items" aria-labelledby="items">
   <h2 id="items">All test items</h2>
   <p class="hint">Open an item to see every result behind it.</p>
-  ${items.map(({ check, code }) => itemRow(check, code)).join('\n  ')}
+  ${items.map(({ check, code }) => itemRow(check, code, loginWall && (check.id === 'connect' || BEHIND.has(check)) ? 'NEEDS LOGIN' : undefined)).join('\n  ')}
 </section>
+${loginWall ? nextStep(r) : ''}
 ${skipped(r)}
 <footer>
   <p>${esc(r.dataFlow?.summary ?? 'QAmcp sends nothing anywhere except to the server being tested.')}</p>
@@ -109,12 +114,12 @@ function column(kind: 'fail' | 'warn', title: string, list: Listed[], empty: str
   </section>`;
 }
 
-function itemRow(c: CheckResult, code: string): string {
+function itemRow(c: CheckResult, code: string, word?: string): string {
   const status = c.status;
   const lead = c.findings.find((f) => f.status === status) ?? c.findings[0];
   const notTested = status === 'skip';
   return `<details class="row ${status}">
-    <summary>${mark(status)}<span class="code">${code}</span><span class="name">${esc(c.title)}</span><span class="lead">${lead ? findingText(lead, 140) : ''}</span><span class="st">${statusWord(status)}</span><svg class="chev" aria-hidden="true"><use href="#chev"/></svg></summary>
+    <summary>${mark(status)}<span class="code">${code}</span><span class="name">${esc(c.title)}</span><span class="lead">${lead ? findingText(lead, 140) : ''}</span><span class="st">${word ?? statusWord(status)}</span><svg class="chev" aria-hidden="true"><use href="#chev"/></svg></summary>
     <div class="body">${notTested ? `<p class="why">${esc(lead?.message ?? 'This check could not run on this server, so it is not counted either way.')}</p>` : ''}
       ${c.findings
         .filter((f) => !(notTested && f === lead))
@@ -122,6 +127,46 @@ function itemRow(c: CheckResult, code: string): string {
         .join('\n      ')}
     </div>
   </details>`;
+}
+
+// ---------- login wall ----------
+
+// The checks a full run makes behind the login, in the order the CLI runs them.
+const FULL_RUN: [string, string][] = [
+  ['protocol', 'Ready for the newest MCP version'],
+  ['tools', 'Lists its tools'],
+  ['descriptions', 'Every tool is described'],
+  ['labels', 'Tools are labeled safe or dangerous'],
+  ['hidden', 'No hidden instructions'],
+  ['respond', 'Tools work with good inputs'],
+  ['bad-input', 'Bad inputs give a clean error'],
+  ['speed', 'Fast enough'],
+  ['leaks', 'No secrets leaked'],
+  ['resources', 'Resources and prompts work'],
+];
+const BEHIND = new WeakSet<CheckResult>();
+
+function behindLogin(r: Report): CheckResult[] {
+  const have = new Set(r.checks.map((c) => c.id));
+  return FULL_RUN.filter(([id]) => !have.has(id)).map(([id, title]) => {
+    const c: CheckResult = { id, title, status: 'skip', summary: '', weight: 0, findings: [{ status: 'skip', message: 'Behind the login, so not tested yet. It counts neither for nor against the server.' }] };
+    BEHIND.add(c);
+    return c;
+  });
+}
+
+// "Connects" behind a login wall: we reached the server, and it asked for a login.
+function reachedLogin(c: CheckResult): CheckResult {
+  return { ...c, status: 'skip', findings: [{ status: 'skip', message: 'Reached the server. It asks for a login before anything else, which is normal and not a fault.' }] };
+}
+
+function nextStep(r: Report): string {
+  return `<section class="next" aria-labelledby="nx">
+  <h2 id="nx">Test everything behind the login</h2>
+  <p>One command runs every check above on the real tools. Nothing to install: <span class="mono">npx</span> downloads QAmcp and runs it (needs Node.js 20 or newer).</p>
+  <pre class="cmd">npx qamcp-cli ${esc(r.url)} --login --html report.html</pre>
+  <p class="hint">Your browser opens the server's own login page. Your login stays on your computer and goes only to the server. The full report is saved as <span class="mono">report.html</span> in the folder you ran it from. Free and open source.</p>
+</section>`;
 }
 
 function skipped(r: Report): string {
@@ -171,7 +216,7 @@ function capNote(r: Report): string {
 
 function notScoredHtml(reason: string): string {
   return reason === 'needs a login'
-    ? 'This server needs a login. Test again with <span class="mono">--login</span>, or add a key with <span class="mono">--header</span>. A login wall is not a fault, so nothing is scored.'
+    ? 'This server needs a login, so only the login setup could be checked from outside. A login wall is not a fault, so nothing is scored. The command below tests everything behind it.'
     : `Not scored: ${esc(reason)}.`;
 }
 
@@ -305,6 +350,9 @@ details[open] .chev{transform:rotate(180deg)}
 .fd{display:grid;grid-template-columns:20px 64px 1fr;gap:10px;align-items:start;padding:8px 0}
 .fd .mk{width:17px;height:17px;margin-top:2px}
 .fd p{font-size:15px;line-height:1.45;max-width:72ch;overflow-wrap:anywhere}
+.next{margin-top:48px;padding:22px 24px;background:var(--sheet);border:1px solid var(--rule);border-left:3px solid var(--rose);border-radius:12px;max-width:88ch}
+.next p{color:var(--soft);font-size:15px;margin-top:8px}
+.next .cmd{margin:14px 0 4px;padding:12px 14px;background:var(--ground);border:1px solid var(--rule);border-radius:8px;font-family:var(--mono);font-size:14px;color:var(--ink);white-space:pre-wrap;word-break:break-all;font-variant-ligatures:none}
 .skipped{margin-top:48px}
 .skipped ul{list-style:none;padding:0}
 .skipped li{display:grid;grid-template-columns:22px minmax(140px,260px) 1fr;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--rule);font-size:15px;color:var(--soft)}

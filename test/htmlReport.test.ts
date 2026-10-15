@@ -65,6 +65,17 @@ test('a login wall: NOT SCORED, no score shown, and the login is not listed as a
   const failures = html.slice(html.indexOf('Failures: fix these first'), html.indexOf('Advisories: worth fixing'));
   assert.doesNotMatch(failures, /login key/);
   assert.match(html, /A login wall is not a fault/);
+  // reaching a login is not a failed connection, and every check behind it is listed as not tested
+  assert.doesNotMatch(html, /class="st">FAIL</);
+  assert.doesNotMatch(html, /Could not connect/);
+  assert.match(html, /Tools work with good inputs<\/span><span class="lead">Behind the login/);
+  assert.equal(html.match(/class="st">NEEDS LOGIN</g)?.length, 11); // Connects + the 10 checks behind the login
+  assert.match(html, /npx qamcp-cli https:\/\/mcp\.example\.com\/mcp --login --html report\.html/);
+});
+
+test('a normal report has no login box and no NEEDS LOGIN rows', () => {
+  const html = toHtml(report([check('connect', 'Connects', 'pass', [{ status: 'pass', message: 'Connected in 80 ms' }])]));
+  assert.doesNotMatch(html, /NEEDS LOGIN|Test everything behind the login/);
 });
 
 test('every result has a drawn mark and a word, so colour is never the only signal', () => {
