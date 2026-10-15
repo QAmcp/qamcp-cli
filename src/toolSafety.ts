@@ -96,9 +96,11 @@ export function labelContradiction(tool: Tool): string | undefined {
 //                        unlabeled tool must be treated as possibly dangerous.
 //   'owner':  also unlabeled tools that clearly only read. Only for someone who owns the server.
 //   'all':    every tool that isn't labeled or named dangerous. Owner's own risk.
-export type SafetyMode = 'labeled' | 'owner' | 'all';
+// 'none' (look-only) calls no tools at all: for servers you don't trust, since a label is only the server's word.
+export type SafetyMode = 'none' | 'labeled' | 'owner' | 'all';
 
 export function decideRun(tool: Tool, mode: SafetyMode): RunDecision {
+  if (mode === 'none') return { run: false, why: 'look-only mode: no tools are called' };
   const a = tool.annotations;
   if (a?.destructiveHint === true) return { run: false, why: 'labeled dangerous' };
   if (looksDestructive(tool.name)) return { run: false, why: 'name sounds like it deletes something' };

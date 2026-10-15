@@ -145,10 +145,19 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
         report.calls.push({ ...rec, text: `[${bad.label}] ${rec.text}` });
       }
     }
+    if (opts.safety === 'none') {
+      // Look-only: say plainly what wasn't tested, instead of "no tools ran".
+      const why = 'Look-only mode: no tools were called, so this was not tested (not counted either way)';
+      push(check('respond', 'Tools work with good inputs', 10, [{ status: 'skip', message: why }], true));
+      push(check('bad-input', 'Bad inputs give a clean error', 10, [{ status: 'skip', message: why }], true));
+      push(speedCheck(connectMs, listMs, report.calls, report.protocol?.transport === 'stdio'));
+      push(check('leaks', 'No secrets leaked', 5, [{ status: 'skip', message: why }], true));
+    } else {
     push(toolsRespondCheck(report.calls, runnable.length, report.skippedTools));
     push(badInputCheck(report.calls, runnable.length));
     push(speedCheck(connectMs, listMs, report.calls, report.protocol?.transport === 'stdio'));
     push(leakCheck(report.calls, !!opts.stdio));
+    }
     }
     // Resources and prompts: only a check when the server offers them.
     say({ kind: 'working', message: 'Opening resources and prompts' });

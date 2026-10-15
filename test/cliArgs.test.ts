@@ -62,3 +62,7 @@ test('wrong options give plain messages', () => {
 test('--help is accepted on its own', () => {
   assert.equal(parseArgs(['--help']).help, true);
 });
+
+test('--look-only sets the no-calls safety mode', () => {
+  assert.equal(parseArgs(['https://x.io/mcp', '--look-only']).safety, 'none');
+});

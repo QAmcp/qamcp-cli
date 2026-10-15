@@ -132,6 +132,7 @@ npx qamcp-cli https://your-server.com/mcp --header "Authorization: Bearer YOUR_K
 npx qamcp-cli https://your-server.com/mcp --login                                     # log in through your browser
 npx qamcp-cli https://your-server.com/mcp --json report.json                         # save the full report
 npx qamcp-cli https://your-server.com/mcp --html report.html                         # a report page you can open and share (works offline)
+npx qamcp-cli https://your-server.com/mcp --look-only                              # call no tools at all: a safe first look at a server you don't trust
 ```
 
 ## Test on every change (GitHub)

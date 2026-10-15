@@ -23,7 +23,9 @@ export function formatReport(r: Report): string {
   if (byName.length) lines.push(`Ran ${byName.length} unlabeled tool${byName.length === 1 ? '' : 's'} because the name says it only reads: ${byName.join(', ')}`);
   const unlabeled = r.skippedTools.filter((s) => s.why.startsWith('no safety label'));
   const capped = r.skippedTools.filter((s) => s.why.startsWith('we test at most'));
-  const risky = r.skippedTools.filter((s) => !s.why.startsWith('no safety label') && !s.why.startsWith('we test at most'));
+  const lookOnly = r.skippedTools.filter((s) => s.why.startsWith('look-only'));
+  if (lookOnly.length) lines.push(`Look-only mode: called none of the ${lookOnly.length} tools. Tools, bad inputs and leaks were not tested.`);
+  const risky = r.skippedTools.filter((s) => !s.why.startsWith('no safety label') && !s.why.startsWith('we test at most') && !s.why.startsWith('look-only'));
   if (capped.length) lines.push(`Did not run ${capped.length} more safe tool${capped.length === 1 ? '' : 's'} (${capped[0].why}): ${capped.map((s) => s.tool).join(', ')}`);
   if (unlabeled.length) {
     lines.push(`Did not run ${unlabeled.length} tool${unlabeled.length === 1 ? '' : 's'} with no safety label (MCP rules say to treat these as possibly dangerous): ${unlabeled.map((s) => s.tool).join(', ')}`);

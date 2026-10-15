@@ -13,6 +13,8 @@ What to test
   --timeout <seconds>        time limit per request (default 20)
 
 Which tools may run
+  --look-only                call no tools at all: only read what the server says about itself
+                             (for a server you don't trust; tools, bad inputs and leaks are not tested)
   --owner                    I own this server: also run unlabeled tools whose names clearly only read
   --run-unlabeled            I own this server: run every tool not named or labeled dangerous (your own risk)
 
@@ -35,7 +37,7 @@ export interface Args {
   url?: string;
   stdio?: { command: string; args: string[]; env: Record<string, string>; cwd?: string };
   headers: Record<string, string>;
-  safety: 'labeled' | 'owner' | 'all';
+  safety: 'none' | 'labeled' | 'owner' | 'all';
   timeoutMs?: number;
   login: boolean;
   failUnder?: number;
@@ -89,6 +91,7 @@ export function parseArgs(argv: string[]): Args {
       case '--cwd': cwd = need(++i, f); break;
       case '--login': a.login = true; break;
       case '--timeout': a.timeoutMs = num(++i, f) * 1000; break;
+      case '--look-only': a.safety = 'none'; break;
       case '--owner': a.safety = 'owner'; break;
       case '--run-unlabeled': a.safety = 'all'; break;
       case '--fail-under': a.failUnder = num(++i, f); break;

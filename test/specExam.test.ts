@@ -181,3 +181,18 @@ test('worst: a 404 with nothing at /mcp either says so plainly, no raw error', a
   const r = await runTest(`${base}/nothere`, { timeoutMs: 6_000 });
   assert.equal(r.checks[0].findings[0].message, 'Nothing at this address (HTTP 404). Check the link: MCP servers usually live at an address ending in /mcp.');
 });
+
+// ---------- look-only mode (a server you don't trust: a label is only the server's word) ----------
+
+test('look-only: no tool is called at all, the reading checks still run, and the rest says why it was not tested', async () => {
+  const r = await runTest(`${base}/schemas/mcp`, { timeoutMs: 6_000, safety: 'none' });
+  assert.equal(r.calls.length, 0);
+  assert.equal(r.coverage.toolsRun, 0);
+  assert.ok(r.skippedTools.length > 0 && r.skippedTools.every((s) => s.why === 'look-only mode: no tools are called'));
+  for (const id of ['respond', 'bad-input', 'leaks']) {
+    const c = r.checks.find((x) => x.id === id)!;
+    assert.equal(c.status, 'skip', id);
+    assert.match(c.findings[0].message, /Look-only mode: no tools were called/);
+  }
+  for (const id of ['descriptions', 'labels', 'hidden']) assert.ok(r.checks.some((x) => x.id === id && x.status !== 'skip'), id);
+});

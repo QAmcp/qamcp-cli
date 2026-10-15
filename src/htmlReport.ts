@@ -222,6 +222,7 @@ function notScoredHtml(reason: string): string {
 }
 
 function safetyWords(s: string | undefined): string {
+  if (s === 'none') return 'Look only: no tools were called';
   if (s === 'owner') return 'Owner: also ran unlabeled tools whose names only read';
   if (s === 'all') return 'Owner: ran every tool not labeled or named dangerous';
   return 'Only tools labeled read-only were run';
