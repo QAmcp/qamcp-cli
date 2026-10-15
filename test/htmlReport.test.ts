@@ -73,6 +73,12 @@ test('a login wall: NOT SCORED, no score shown, and the login is not listed as a
   assert.match(html, /npx qamcp-cli https:\/\/mcp\.example\.com\/mcp --login --html report\.html/);
 });
 
+test('noindex only when asked: a page shared by link stays out of search engines', () => {
+  const r = report([check('connect', 'Connects', 'pass', [{ status: 'pass', message: 'ok' }])]);
+  assert.doesNotMatch(toHtml(r), /noindex/);
+  assert.match(toHtml(r, { noindex: true }), /<meta name="robots" content="noindex, nofollow">/);
+});
+
 test('a normal report has no login box and no NEEDS LOGIN rows', () => {
   const html = toHtml(report([check('connect', 'Connects', 'pass', [{ status: 'pass', message: 'Connected in 80 ms' }])]));
   assert.doesNotMatch(html, /NEEDS LOGIN|Test everything behind the login/);

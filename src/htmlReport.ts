@@ -16,6 +16,7 @@ const REPO = 'https://github.com/abhiramreddykalluru01-debug/qamcp-cli';
 
 export interface HtmlOptions {
   title?: string; // a friendlier name than the server's own, e.g. "Acme MCP server"
+  noindex?: boolean; // keep search engines away (a page shared only by its link)
 }
 
 export function toHtml(r: Report, opts: HtmlOptions = {}): string {
@@ -51,7 +52,7 @@ export function toHtml(r: Report, opts: HtmlOptions = {}): string {
   ];
 
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${opts.noindex ? '<meta name="robots" content="noindex, nofollow">' : ''}
 <title>${esc(`${verdict.word === 'NOT SCORED' ? 'Not scored' : r.score + '/100'} · ${name} · QAmcp test certificate`)}</title>
 <meta name="color-scheme" content="dark">
 <style>${fontFaces()}${CSS}</style></head>
