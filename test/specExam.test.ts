@@ -169,3 +169,15 @@ test('weird but OK: a local program showing paths on your own computer is not a 
   const leaks = r.checks.find((c) => c.id === 'leaks')!;
   assert.ok(!leaks.findings.some((f) => /shows internal details/.test(f.message)), JSON.stringify(leaks.findings));
 });
+
+// ---------- wrong links (real case: a registry listing without the /mcp at the end) ----------
+
+test('worst: a link missing /mcp is named, with the address that does answer', async () => {
+  const r = await runTest(`${base}/pages3`, { timeoutMs: 6_000 });
+  assert.equal(r.checks[0].findings[0].message, `Nothing at this address (HTTP 404), but an MCP server answers at ${base}/pages3/mcp. The link points to the wrong place: use that one instead.`);
+});
+
+test('worst: a 404 with nothing at /mcp either says so plainly, no raw error', async () => {
+  const r = await runTest(`${base}/nothere`, { timeoutMs: 6_000 });
+  assert.equal(r.checks[0].findings[0].message, 'Nothing at this address (HTTP 404). Check the link: MCP servers usually live at an address ending in /mcp.');
+});

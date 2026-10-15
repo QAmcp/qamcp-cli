@@ -55,7 +55,11 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
     programOutput = conn.programOutput;
     push(check('connect', 'Connects', 15, [{ status: 'pass', message: `Connected in ${fmtMs(connectMs)}` }]));
   } catch (err) {
-    push(check('connect', 'Connects', 15, [{ status: 'fail', message: explainConnectError(err, !!opts.stdio) }]));
+    let why = explainConnectError(err, !!opts.stdio);
+    // The most common wrong link: the server lives at …/mcp, but the link (often copied from a listing) leaves it out.
+    const alt = !opts.stdio && [404, 405].includes(httpStatus(err) ?? 0) ? await mcpPathAnswers(url, opts.fetch, timeoutMs) : undefined;
+    if (alt) why = `Nothing at this address (HTTP ${httpStatus(err)}), but an MCP server answers at ${alt}. The link points to the wrong place: use that one instead.`;
+    push(check('connect', 'Connects', 15, [{ status: 'fail', message: why }]));
     // A login wall isn't a broken server: say so instead of giving it a zero.
     if (needsLogin(err)) report.notScored = 'needs a login';
     // Even without logging in we can read the server's public login setup, and often explain why logging in fails.
@@ -542,10 +546,48 @@ function explainConnectError(err: unknown, isProgram = false): string {
   if (/ETIMEDOUT|UND_ERR_CONNECT_TIMEOUT|ConnectTimeout/i.test(msg)) return 'The server did not answer in time.';
   if (/CERT|certificate|SSL|TLS/i.test(msg)) return "The server's security certificate is not valid, so AI apps won't connect to it.";
   if (/<!doctype html|<html|content.type: text\/html/i.test(msg)) return 'That address is a normal web page, not an MCP server. Check the link (it often ends in /mcp).';
-  const http = msg.match(/(?:status|HTTP) (\d{3})/i);
-  if (http) return `The server answered with an error (HTTP ${http[1]}) instead of connecting.`;
+  const http = httpStatus(err);
+  if (http === 404) return 'Nothing at this address (HTTP 404). Check the link: MCP servers usually live at an address ending in /mcp.';
+  if (http) return `The server answered with an error (HTTP ${http}) instead of connecting.`;
   if (/bad port/i.test(msg)) return 'That port is blocked for web requests. Use a different port.';
   return `Could not connect: ${short(errText(err).replace(/\s*\{"cause".*$/s, ''))}`;
+}
+
+// The HTTP status behind a failed connection, in any of the shapes it reaches us:
+// "HTTP 404", "status 404", or the SDK's JSON {"status":404,…}.
+function httpStatus(err: unknown): number | undefined {
+  const direct = (err as any)?.data?.status ?? (err as any)?.status;
+  if (typeof direct === 'number') return direct;
+  const m = [errText(err), ...causes(err)].join(' ').match(/(?:status|HTTP)"?\s*[: ]\s*(\d{3})\b/i);
+  return m ? Number(m[1]) : undefined;
+}
+
+// When a link without /mcp gets 404, does …/mcp answer like an MCP server? Any reply except
+// "not found" counts (a login wall included); nothing is sent but an MCP hello.
+async function mcpPathAnswers(url: string, fetchImpl: typeof fetch | undefined, timeoutMs: number): Promise<string | undefined> {
+  let alt: string;
+  try {
+    const u = new URL(url);
+    if (/\/mcp\/?$/.test(u.pathname)) return undefined;
+    u.pathname = u.pathname.replace(/\/?$/, '/mcp');
+    alt = u.toString();
+  } catch {
+    return undefined;
+  }
+  try {
+    const res = await (fetchImpl ?? fetch)(alt, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'qamcp', version: '1' } } }),
+      signal: AbortSignal.timeout(Math.min(timeoutMs, 10_000)),
+    });
+    await res.body?.cancel().catch(() => {});
+    const type = res.headers.get('content-type') ?? '';
+    const looksMcp = res.ok ? /json|event-stream/i.test(type) : res.status === 401 || res.status === 403;
+    return looksMcp ? alt : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // Codes and messages of the errors underneath this one.
