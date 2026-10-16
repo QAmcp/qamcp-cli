@@ -10,7 +10,7 @@
 
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { join } from 'node:path';
 import type {
@@ -119,6 +119,9 @@ export class FileOAuthProvider implements OAuthClientProvider {
 
   private persist() {
     mkdirSync(DIR, { recursive: true });
+    // The folder ignores itself, so a login saved inside someone's project can't be committed by accident.
+    const ignore = join('.qamcp', '.gitignore');
+    if (!existsSync(ignore)) writeFileSync(ignore, '# QAmcp keeps saved logins here. Never commit them.\n*\n');
     writeFileSync(fileFor(this.serverUrl), JSON.stringify(this.saved, null, 2), { mode: 0o600 });
   }
 }

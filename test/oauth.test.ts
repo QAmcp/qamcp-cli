@@ -34,7 +34,7 @@ test('rejects a cancelled login without showing the server error text', async ()
   await failed;
 });
 
-import { rmSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { runTest } from '../src/runTest.js';
 import { startAuthServer } from './authServer.js';
 
@@ -56,6 +56,8 @@ test('command-line --login, start to finish: login page, approval, token, test, 
     assert.equal(first.checks.find((c) => c.id === 'connect')!.status, 'pass');
     assert.equal(first.testedAs?.loggedIn, true);
     assert.equal(pagesOpened, 1);
+    // the saved login can't be committed by accident: its folder ignores itself
+    assert.match(readFileSync('.qamcp/.gitignore', 'utf8'), /^\*$/m);
     assert.ok(first.calls.some((c) => c.tool === 'whoami' && c.outcome === 'ok'));
 
     const second = await runTest(url, { login: { onLoginUrl }, timeoutMs: 15_000 });
