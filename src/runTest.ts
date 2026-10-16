@@ -1,6 +1,7 @@
 import { ProtocolError, SdkError, SdkErrorCode, fromJsonSchema, specTypeSchemas, type Client, type Tool } from '@modelcontextprotocol/client';
 import { connect, stdoutNoise } from './connect.js';
 import { toolboxHash, toolFingerprints } from './ci.js';
+import { chainCheck } from './chains.js';
 import { checkResourcesAndPrompts } from './resourcesPrompts.js';
 import { badReplyWords, classifyError, schemaIssueWords } from './errorKind.js';
 import { checkLoginSetup } from './oauthSetup.js';
@@ -171,6 +172,23 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
     } else {
     push(toolsRespondCheck(report.calls, runnable.length, report.skippedTools));
     push(badInputCheck(report.calls, runnable.length));
+    // Chains run before the speed and secrets checks, so their answers are timed and scanned too.
+    say({ kind: 'working', message: 'Trying tools together (one tool\'s answer into another)' });
+    const good = report.calls.filter((c) => c.kind === 'good-input' && c.outcome === 'ok' && c.text.trim().length > 2);
+    const whyOf = new Map(runnable.map((r) => [r.tool.name, r.why]));
+    push(
+      await chainCheck({
+        tools: runnable.map((r) => r.tool),
+        starts: good.map((c) => ({ tool: c.tool, args: c.arguments as Record<string, unknown>, result: c.text })),
+        worksAlone: new Set(good.map((c) => c.tool)),
+        sampleArgs: (t) => goodArgs(t.inputSchema),
+        execute: async (t, args) => {
+          const rec = await run(t, whyOf.get(t.name)!, 'chain', args);
+          report.calls.push(rec);
+          return rec;
+        },
+      }),
+    );
     push(speedCheck(connectMs, listMs, report.calls, report.protocol?.transport === 'stdio'));
     push(leakCheck(report.calls, !!opts.stdio));
     }
@@ -204,7 +222,8 @@ function finish(report: Report): Report {
     // The login-setup check only exists when the server asks for a login.
     // Some checks only exist for some servers (login, resources and prompts, plug-ins).
     // Without a tools feature the tool checks don't apply, so they aren't counted as untested.
-    checksTotal: report.offersTools === false ? report.checks.filter((c) => c.id !== 'tools').length : CHECKS_TOTAL + report.checks.filter((c) => !CORE_CHECKS.has(c.id)).length,
+    // "Tools work together" only counts when the server has chains to test.
+    checksTotal: report.offersTools === false ? report.checks.filter((c) => c.id !== 'tools').length : CHECKS_TOTAL + report.checks.filter((c) => !CORE_CHECKS.has(c.id) && !(c.id === 'chains' && c.status === 'skip')).length,
     toolsRun: new Set(report.calls.filter((c) => !NOT_TESTED.has(c.outcome)).map((c) => c.tool)).size,
     toolsTotal: report.toolCount,
   };

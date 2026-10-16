@@ -23,7 +23,7 @@ export interface CheckResult {
 
 export interface ToolCallRecord {
   tool: string;
-  kind: 'good-input' | 'bad-input';
+  kind: 'good-input' | 'bad-input' | 'chain'; // chain: an answer from another tool, fed into this one
   why: RunReason; // why we were allowed to run it
   arguments: unknown;
   ms: number;

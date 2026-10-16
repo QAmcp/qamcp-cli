@@ -274,6 +274,23 @@ VARIANTS.defaults = {
   tools: [tool('wire_size', { inputSchema: { type: 'object', properties: { material: { type: 'string', enum: ['cu', 'al'], default: 'cu', description: 'Conductor' }, amps: { type: 'number', description: 'Load in amps' } }, required: ['material'] } })],
   call: (_n, a) => (a.amps !== undefined && typeof a.amps !== 'number' ? { content: [{ type: 'text', text: 'Enter valid positive numbers.' }], isError: true } : text('Use 8 AWG copper.')),
 };
+// Tools that work together, or don't (multi-step check).
+const searchUsers = tool('search_users', { inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'Name to look for' } }, required: ['query'] } });
+const getOrders = (idType: string) => tool('get_orders', { inputSchema: { type: 'object', properties: { user_id: { type: idType, description: 'The user to list orders for' } }, required: ['user_id'] } });
+const users = () => text(JSON.stringify([{ user_id: 'u-17', name: 'John Rivera' }]));
+VARIANTS.chainok = {
+  tools: [searchUsers, getOrders('string')],
+  call: (n, a) => (n === 'search_users' ? users() : a.user_id === 'u-17' ? text(JSON.stringify({ orders: [{ id: 'ord-9', item: 'Blue kettle', total: 34.5 }] })) : text(`No orders for ${a.user_id}.`)),
+};
+VARIANTS.chainbroken = {
+  tools: [searchUsers, getOrders('string')],
+  // works with other ids, but can't find the very id search_users hands out
+  call: (n, a) => (n === 'search_users' ? users() : a.user_id === 'u-17' ? { content: [{ type: 'text', text: 'User not found: u-17' }], isError: true } : text(JSON.stringify({ orders: [{ id: 'ord-1', item: 'Mug' }] }))),
+};
+VARIANTS.chaintype = { tools: [searchUsers, getOrders('integer')], call: (n) => (n === 'search_users' ? users() : text(JSON.stringify({ orders: [] }))) };
+VARIANTS.nochain = { tools: [tool('get_weather', { inputSchema: { type: 'object', properties: { city: { type: 'string', description: 'City' } }, required: ['city'] } }), tool('get_time')], call: () => text('Sunny, 21°C at 14:05') };
+// ignores the id: every user gets the same orders
+VARIANTS.chainfake = { tools: [searchUsers, getOrders('string')], call: (n) => (n === 'search_users' ? users() : text(JSON.stringify({ orders: [{ id: 'ord-5', item: 'Same for everyone' }] }))) };
 let limitedOnce = 0;
 VARIANTS.limitonce = { tools: [tool('get_x')] };
 VARIANTS.limited = { tools: [tool('get_x')] };

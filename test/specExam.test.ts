@@ -226,3 +226,36 @@ test('weird but OK: a server that keeps rate-limiting is "not scored", never 0/1
   assert.equal(check('limited', 'connect')!.status, 'skip');
   assert.match(check('limited', 'connect')!.findings[0].message, /limited our requests .* not a fault; try again in a minute/);
 });
+
+// ---------- tools working together (multi-step chains) ----------
+
+test('chains: search_users hands a user_id to get_orders, and it works', () => {
+  const c = check('chainok', 'chains')!;
+  assert.equal(c.status, 'pass', JSON.stringify(c.findings));
+  assert.match(c.findings[0].message, /search_users → get_orders: get_orders found what search_users returned \(user_id = "u-17"\)/);
+});
+
+test('chains: get_orders works alone but cannot use the id search_users just gave it (broken handoff)', () => {
+  const c = check('chainbroken', 'chains')!;
+  assert.equal(c.status, 'warn', JSON.stringify(c.findings));
+  assert.match(c.findings[0].message, /search_users returns user_id "u-17", but get_orders couldn't use it: User not found/);
+});
+
+test('chains: an id handed out as text to an input that only takes a number is a mismatch, found without calling', () => {
+  const c = check('chaintype', 'chains')!;
+  assert.equal(c.status, 'warn', JSON.stringify(c.findings));
+  assert.match(c.findings[0].message, /search_users gives user_id as text \("u-17"\), but get_orders only accepts user_id as a number/);
+});
+
+test('chains: a server with no chains is not tested, and not counted in coverage', () => {
+  const c = check('nochain', 'chains')!;
+  assert.equal(c.status, 'skip');
+  // one fewer check counted than a server whose tools do chain
+  assert.equal(R.nochain.coverage.checksTotal, R.chainok.coverage.checksTotal - 1);
+});
+
+test('chains: a tool that ignores the id (same answer for a made-up one) is not called a working chain', () => {
+  const c = check('chainfake', 'chains')!;
+  assert.ok(!c.findings.some((f) => /found what search_users returned/.test(f.message)), JSON.stringify(c.findings));
+  assert.equal(c.status, 'skip');
+});

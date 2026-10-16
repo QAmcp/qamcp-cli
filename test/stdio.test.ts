@@ -29,7 +29,9 @@ test('stdio: a program on this computer is tested like any server', async () => 
   assert.equal(check(r, 'respond').status, 'pass');
   assert.equal(check(r, 'oauth'), undefined, 'no login check for a program');
   assert.match(check(r, 'speed').findings.map((f) => f.message).join(' | '), /Started in .* isn't judged/);
-  assert.equal(r.coverage.checksTotal, 10);
+  // search_notes hands out note ids that get_note takes: a real chain, so 'Tools work together' counts
+  assert.match(check(r, 'chains').findings[0].message, /search_notes → get_note: get_note found what search_notes returned \(note_id = "N-\d"\)/);
+  assert.equal(r.coverage.checksTotal, 11);
 });
 
 test('stdio: a program that cannot start is a plain failure, not a crash', async () => {
@@ -78,7 +80,7 @@ test('plug-in checks run after the built-in ones, count toward the score, and a 
   });
   assert.equal(r.checks.at(-1)!.id, 'custom');
   assert.match(r.checks.at(-1)!.findings[0].message, /saw 2 tools/);
-  assert.equal(r.coverage.checksTotal, 11);
+  assert.equal(r.coverage.checksTotal, 12);
   const without = await runTest('stdio:plugins-off', { stdio: STDIO, timeoutMs: 30_000 });
   assert.ok(r.score < without.score, 'the plug-in check counted');
 });
