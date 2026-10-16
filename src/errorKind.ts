@@ -58,11 +58,26 @@ export function classifyError(err: unknown): ClassifiedError {
   return { kind: 'unclear', status, text, message: '' };
 }
 
+// "images/0/price must be number, images/1/price must be number, …" said once:
+// "images/*/price must be number (in 10 items)". The same broken field in every item
+// of a list is one problem, not ten.
+export function schemaIssueWords(text: string): string {
+  const groups = new Map<string, number>();
+  for (const raw of text.replace(/(^|[\s,;])data\/?/g, '$1').split(/[,;]\s+(?=\S+ must |must )/)) {
+    const issue = raw.trim();
+    if (!issue) continue;
+    const key = issue.replace(/\/\d+(?=\/|\s)/g, '/*');
+    groups.set(key, (groups.get(key) ?? 0) + 1);
+  }
+  const shown = [...groups].slice(0, 2).map(([issue, n]) => (n > 1 ? `${issue} (in ${n} items)` : issue));
+  return shown.join('; ') + (groups.size > 2 ? `; and ${groups.size - 2} more` : '');
+}
+
 // Plain words for a reply that broke the MCP rules.
 export function badReplyWords(text: string): string {
   if (/has an output schema but did not return structured content/i.test(text)) return 'it promised a structured answer (outputSchema) but sent none';
   const mismatch = text.match(/Structured content does not match the tool's output schema:\s*(.*)$/i);
-  if (mismatch) return `its structured answer doesn't match its own output schema (${mismatch[1].replace(/data\/?/g, '').trim()})`;
+  if (mismatch) return `its structured answer doesn't match its own output schema (${schemaIssueWords(mismatch[1])})`;
   if (/Unexpected content type: text\/html/i.test(text)) return 'it sent a web page instead of an MCP reply';
   if (/Unexpected end of JSON/i.test(text)) return 'it sent an empty reply';
   if (/is not valid JSON|Unexpected token|Invalid JSON/i.test(text)) return 'its reply is not valid JSON';

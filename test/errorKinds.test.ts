@@ -92,3 +92,11 @@ test('resources follow the same rule, and the count says how many could not be c
   assert.match(on('notJson')[0].message, /breaks the MCP rules/);
   assert.ok(f.some((x) => /Opened 1 of 3 resources; 3 could not be checked/.test(x.message)), f.map((x) => x.message).join(' | '));
 });
+
+import { schemaIssueWords } from '../src/errorKind.js';
+
+test('a broken field repeated in every list item is said once, with a count (real MemeStack case)', () => {
+  const sdk = Array.from({ length: 10 }, (_, i) => `data/images/${i}/zap_total_sats must be number`).join(', ');
+  assert.equal(schemaIssueWords(sdk), 'images/*/zap_total_sats must be number (in 10 items)');
+  assert.equal(schemaIssueWords('data/total must be integer, data/items/0/id must be string'), 'total must be integer; items/*/id must be string');
+});

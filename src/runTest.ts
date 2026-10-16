@@ -2,7 +2,7 @@ import { ProtocolError, SdkError, SdkErrorCode, fromJsonSchema, specTypeSchemas,
 import { connect, stdoutNoise } from './connect.js';
 import { toolboxHash, toolFingerprints } from './ci.js';
 import { checkResourcesAndPrompts } from './resourcesPrompts.js';
-import { badReplyWords, classifyError } from './errorKind.js';
+import { badReplyWords, classifyError, schemaIssueWords } from './errorKind.js';
 import { checkLoginSetup } from './oauthSetup.js';
 import { badArgs, goodArgs } from './sampleArgs.js';
 import { HIDDEN_INSTRUCTION_PATTERNS, INTERNAL_PATTERNS, SECRET_PATTERNS, VALID_TOOL_NAME, allMatches, firstMatch } from './patterns.js';
@@ -507,8 +507,7 @@ async function outputSchemaProblem(tool: Tool, result: any): Promise<string | un
   }
   const v: any = await validator['~standard'].validate(result.structuredContent);
   if (!v?.issues?.length) return undefined;
-  const words = v.issues.slice(0, 2).map((i: any) => String(i.message).replace(/^data\/?/, '').replace(/^\s+/, '')).join('; ');
-  return `its structured answer doesn't match its own output schema (${words})`;
+  return `its structured answer doesn't match its own output schema (${schemaIssueWords(v.issues.map((i: any) => String(i.message)).join(', '))})`;
 }
 
 function resultText(result: any): string {
