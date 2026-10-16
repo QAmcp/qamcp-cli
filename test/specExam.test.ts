@@ -196,3 +196,20 @@ test('look-only: no tool is called at all, the reading checks still run, and the
   }
   for (const id of ['descriptions', 'labels', 'hidden']) assert.ok(r.checks.some((x) => x.id === id && x.status !== 'skip'), id);
 });
+
+// ---------- fair to servers (real cases from the 2026-10-16 daily run) ----------
+
+test('weird but OK: a login asked for only when listing tools is a login wall, not a failure (kaiv)', () => {
+  assert.equal(R.listlogin.notScored, 'needs a login');
+  assert.equal(check('listlogin', 'tools')!.status, 'skip');
+  assert.match(check('listlogin', 'tools')!.findings[0].message, /asks for a login before it lists its tools/);
+});
+
+test('weird but OK: the same help message for a vague sample and a bad input is not "ignoring input" (StackRates)', () => {
+  assert.ok(!about('helptext', 'ask_prices').some((f) => /ignoring what it is sent/.test(f.message)), JSON.stringify(about('helptext', 'ask_prices')));
+});
+
+test('weird but OK: leaving out an input that has a default is not a "missing required input" (SparkQuote)', () => {
+  assert.ok(!about('defaults', 'wire_size').some((f) => /missing required input/.test(f.message)), JSON.stringify(about('defaults', 'wire_size')));
+  assert.ok(!about('defaults', 'wire_size').some((f) => /ignoring what it is sent/.test(f.message)));
+});

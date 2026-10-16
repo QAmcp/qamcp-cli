@@ -61,9 +61,13 @@ export function badArgs(inputSchema: Schema): BadCase[] {
   const required: string[] = inputSchema.required ?? [];
   const cases: BadCase[] = [];
 
-  if (required.length) cases.push({ label: `missing required input "${required[0]}"`, args: {} });
+  // An input with a default can be left out: the tool filling it in is correct, not a fault.
+  const mustSend = required.filter((k) => props[k]?.default === undefined);
+  if (mustSend.length) cases.push({ label: `missing required input "${mustSend[0]}"`, args: {} });
 
-  const typed = required.find((k) => props[k]?.type) ?? Object.keys(props).find((k) => props[k]?.type);
+  // Prefer an input with no default: a tool may fairly fall back to the default for a bad value.
+  const keys = [...required, ...Object.keys(props).filter((k) => !required.includes(k))];
+  const typed = keys.find((k) => props[k]?.type && props[k]?.default === undefined) ?? keys.find((k) => props[k]?.type);
   if (typed) {
     const type = props[typed].type;
     const wrong = type === 'string' ? 12345 : 'not-a-' + (Array.isArray(type) ? type[0] : type);

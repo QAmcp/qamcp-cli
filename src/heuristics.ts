@@ -112,6 +112,8 @@ export interface HollowTool {
   serious: boolean; // both signs at once: the same empty "success" whatever we send
 }
 
+const HELP_TEXT = /\b(?:e\.g\.|for example|please (?:provide|enter|specify|ask|include)|ask with|usage:|try asking|enter (?:a|an|valid)\b|not recognized|nothing recognized|no [\w ,]{1,40} recognized|could not understand|did not understand)/i;
+
 // Tools that answer the same way to good and bad input, or say "success" with no data.
 export function hollowTools(calls: ToolCallRecord[]): HollowTool[] {
   const out: HollowTool[] = [];
@@ -121,7 +123,9 @@ export function hollowTools(calls: ToolCallRecord[]): HollowTool[] {
     const good = list.find((c) => c.kind === 'good-input' && c.outcome === 'ok');
     if (!good) continue;
     const body = (c: ToolCallRecord) => c.text.replace(/^\[[^\]]+\]\s*/, '').trim();
-    const sameForBad = list.some((c) => c.kind === 'bad-input' && c.outcome === 'ok' && body(c) === body(good));
+    // A help message ("ask with a size, e.g. …") for our vague sample and for a bad input is the tool
+    // asking for better input both times, not ignoring it.
+    const sameForBad = !HELP_TEXT.test(body(good)) && list.some((c) => c.kind === 'bad-input' && c.outcome === 'ok' && body(c) === body(good));
     const empty = isEmptySuccess(body(good));
     if (sameForBad && empty) out.push({ tool, serious: true, reason: `answers ${short(body(good))} whatever we send, even with inputs missing. It claims success but returns no data.` });
     else if (empty) out.push({ tool, serious: false, reason: `answers ${short(body(good))} with no actual data` });

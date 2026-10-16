@@ -92,6 +92,12 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
       try {
         listing = await listToolsPaged(client, timeoutMs);
       } catch (err) {
+        // Some servers let anyone connect, then ask for a login at this step: still a login wall, not a fault.
+        if (listNeedsLogin(err)) {
+          report.notScored = 'needs a login';
+          push(check('tools', 'Lists its tools', 10, [{ status: 'skip', message: `The server asks for a login before it lists its tools (${short(serverSaid(err), 120)})` }], true));
+          return finish(report);
+        }
         push(check('tools', 'Lists its tools', 10, [{ status: 'fail', message: toolListError(errText(err)) }]));
         return finish(report);
       }
@@ -527,6 +533,18 @@ function errText(err: unknown): string {
 function needsLogin(err: unknown): boolean {
   const status = (err as any)?.data?.status ?? (err as any)?.status;
   return (err instanceof SdkError && (err.code === SdkErrorCode.ClientHttpAuthentication || err.code === SdkErrorCode.ClientHttpForbidden)) || status === 401 || status === 403;
+}
+
+// A login asked for in words rather than with a 401 (e.g. JSON-RPC error -32001 "Authentication required").
+const LOGIN_WORDS = /\b(?:auth(?:entication|orization) (?:is )?required|unauthori[sz]ed|not authenticated|(?:sign|log)[ -]?in (?:is )?required|please (?:sign|log) ?in|api key (?:is )?(?:required|missing)|missing (?:api )?key|connect your [\w ]{1,30}account)\b/i;
+function listNeedsLogin(err: unknown): boolean {
+  return needsLogin(err) || LOGIN_WORDS.test(errText(err));
+}
+
+// The server's own message inside an SDK error, when there is one.
+function serverSaid(err: unknown): string {
+  const t = errText(err);
+  return t.match(/"message":"((?:[^"\\]|\\.)*)"/)?.[1] ?? t;
 }
 
 // Plain words for why the tool list couldn't be read.

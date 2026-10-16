@@ -15,6 +15,7 @@ interface Variant {
   resources?: Json[];
   read?: (uri: string) => Json;
   session?: boolean; // keep a session id, like stateful servers
+  listError?: { code: number; message: string }; // tools/list refused (e.g. a login asked for only at this step)
 }
 
 const text = (t: string) => ({ content: [{ type: 'text', text: t }] });
@@ -213,6 +214,7 @@ function answer(v: Variant, msg: Json): Json | undefined {
     case 'ping':
       return ok({});
     case 'tools/list': {
+      if (v.listError) return err(v.listError.code, v.listError.message);
       if (!caps.tools || (!v.tools && !v.pages)) return err(-32601, 'Method not found');
       if (v.pages) {
         const page = v.pages[msg.params?.cursor ?? ''];
@@ -260,6 +262,16 @@ export function round2(url: URL, msg: any, res: ServerResponse): boolean {
   }
   return false;
 }
+// Real cases from the 2026-10-16 daily run (kaiv, StackRates, SparkQuote).
+VARIANTS.listlogin = { tools: [tool('get_x')], listError: { code: -32001, message: 'Authentication required. Connect your Kaiva account, or send a kv_mgmt_ management key.' } };
+VARIANTS.helptext = {
+  tools: [tool('ask_prices', { inputSchema: { type: 'object', properties: { question: { type: 'string', description: 'A question about prices' } }, required: ['question'] } })],
+  call: (_n, a) => (typeof a.question === 'string' && /\d/.test(a.question) ? text('Cheapest 4 GB VPS: $5/mo') : text('Ask with a size, budget or place, e.g. "cheapest 4 GB VPS under $10". Nothing recognized.')),
+};
+VARIANTS.defaults = {
+  tools: [tool('wire_size', { inputSchema: { type: 'object', properties: { material: { type: 'string', enum: ['cu', 'al'], default: 'cu', description: 'Conductor' }, amps: { type: 'number', description: 'Load in amps' } }, required: ['material'] } })],
+  call: (_n, a) => (a.amps !== undefined && typeof a.amps !== 'number' ? { content: [{ type: 'text', text: 'Enter valid positive numbers.' }], isError: true } : text('Use 8 AWG copper.')),
+};
 VARIANTS.streamed = { tools: [tool('get_answer')] };
 VARIANTS.huge = { tools: [tool('get_export')] };
 VARIANTS.futureversion = { tools: [tool('get_x')] };
