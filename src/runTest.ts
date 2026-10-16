@@ -46,7 +46,13 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
   let connectMs: number;
   let programOutput: (() => string) | undefined;
   try {
-    const conn = await connect(url, opts.headers ?? {}, timeoutMs, opts.login, opts.fetch, opts.stdio, opts.authProvider);
+    const attempt = () => connect(url, opts.headers ?? {}, timeoutMs, opts.login, opts.fetch, opts.stdio, opts.authProvider);
+    // A rate limit is the server asking us to slow down: wait a moment and try once more, as a polite app would.
+    const conn = await attempt().catch(async (err) => {
+      if (opts.stdio || httpStatus(err) !== 429) throw err;
+      await new Promise((r) => setTimeout(r, RATE_LIMIT_WAIT_MS));
+      return attempt();
+    });
     client = conn.client;
     connectMs = conn.ms;
     const info = client.getServerVersion();
@@ -59,7 +65,11 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
     // The most common wrong link: the server lives at …/mcp, but the link (often copied from a listing) leaves it out.
     const alt = !opts.stdio && [404, 405].includes(httpStatus(err) ?? 0) ? await mcpPathAnswers(url, opts.fetch, timeoutMs) : undefined;
     if (alt) why = `Nothing at this address (HTTP ${httpStatus(err)}), but an MCP server answers at ${alt}. The link points to the wrong place: use that one instead.`;
-    push(check('connect', 'Connects', 15, [{ status: 'fail', message: why }]));
+    // A rate limit isn't a broken server either: it just asked us to slow down.
+    const limited = !opts.stdio && httpStatus(err) === 429;
+    if (limited) why = 'The server limited our requests (HTTP 429: too many requests), even after waiting. This is not a fault; try again in a minute.';
+    push(check('connect', 'Connects', 15, [{ status: limited ? 'skip' : 'fail', message: why }], limited));
+    if (limited) report.notScored = 'limited our requests (HTTP 429)';
     // A login wall isn't a broken server: say so instead of giving it a zero.
     if (needsLogin(err)) report.notScored = 'needs a login';
     // Even without logging in we can read the server's public login setup, and often explain why logging in fails.
@@ -623,6 +633,8 @@ function causes(err: unknown): string[] {
   for (let i = 0; e && i < 6; i++, e = e.cause) out.push(String(e.code ?? ''), String(e.message ?? ''));
   return out;
 }
+
+const RATE_LIMIT_WAIT_MS = 3_000;
 
 function fmtMs(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;

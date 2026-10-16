@@ -190,6 +190,8 @@ export function startSpecServer(port: number) {
     const v = m && VARIANTS[m[1]];
     if (!v) return void res.writeHead(404).end();
     if (req.method !== 'POST') return void res.writeHead(405).end();
+    // Rate limits (real StackRates case): 'limitonce' refuses the first request, 'limited' every one.
+    if (m![1] === 'limited' || (m![1] === 'limitonce' && limitedOnce++ === 0)) return void res.writeHead(429).end();
     const body = raw ? JSON.parse(raw) : undefined;
     if (!Array.isArray(body) && round2(url, body, res)) return;
     const msgs = Array.isArray(body) ? body : [body];
@@ -272,6 +274,9 @@ VARIANTS.defaults = {
   tools: [tool('wire_size', { inputSchema: { type: 'object', properties: { material: { type: 'string', enum: ['cu', 'al'], default: 'cu', description: 'Conductor' }, amps: { type: 'number', description: 'Load in amps' } }, required: ['material'] } })],
   call: (_n, a) => (a.amps !== undefined && typeof a.amps !== 'number' ? { content: [{ type: 'text', text: 'Enter valid positive numbers.' }], isError: true } : text('Use 8 AWG copper.')),
 };
+let limitedOnce = 0;
+VARIANTS.limitonce = { tools: [tool('get_x')] };
+VARIANTS.limited = { tools: [tool('get_x')] };
 VARIANTS.streamed = { tools: [tool('get_answer')] };
 VARIANTS.huge = { tools: [tool('get_export')] };
 VARIANTS.futureversion = { tools: [tool('get_x')] };

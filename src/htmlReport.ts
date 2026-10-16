@@ -218,7 +218,7 @@ function capNote(r: Report): string {
 function notScoredHtml(reason: string): string {
   return reason === 'needs a login'
     ? 'This server needs a login, so only the login setup could be checked from outside. A login wall is not a fault, so nothing is scored. The command below tests everything behind it.'
-    : `Not scored: ${esc(reason)}.`;
+    : `Not scored: this server ${esc(reason)}. That is not a fault; try again in a minute.`;
 }
 
 function safetyWords(s: string | undefined): string {

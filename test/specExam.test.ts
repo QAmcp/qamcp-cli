@@ -213,3 +213,16 @@ test('weird but OK: leaving out an input that has a default is not a "missing re
   assert.ok(!about('defaults', 'wire_size').some((f) => /missing required input/.test(f.message)), JSON.stringify(about('defaults', 'wire_size')));
   assert.ok(!about('defaults', 'wire_size').some((f) => /ignoring what it is sent/.test(f.message)));
 });
+
+// ---------- rate limits at connect (real StackRates case) ----------
+
+test('weird but OK: a server that rate-limits the first request is retried once and tested normally', () => {
+  assert.equal(check('limitonce', 'connect')!.status, 'pass');
+  assert.equal(R.limitonce.notScored, undefined);
+});
+
+test('weird but OK: a server that keeps rate-limiting is "not scored", never 0/100 FAIL', () => {
+  assert.equal(R.limited.notScored, 'limited our requests (HTTP 429)');
+  assert.equal(check('limited', 'connect')!.status, 'skip');
+  assert.match(check('limited', 'connect')!.findings[0].message, /limited our requests .* not a fault; try again in a minute/);
+});
