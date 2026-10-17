@@ -1,6 +1,6 @@
 {
   "name": "qamcp-cli",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Test any MCP server: connection, tools, security, login, resources and prompts. Hard facts, no AI judging.",
   "keywords": [
     "mcp",

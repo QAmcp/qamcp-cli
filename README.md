@@ -6,6 +6,8 @@
 
 Every result is a hard fact (pass or fail, milliseconds, exact matches). No AI judges anything, and nothing is sent anywhere except to the server you test.
 
+**Website:** [qamcp.github.io](https://qamcp.github.io): how it works, sample reports, and running it on every change.
+
 ## Install and first run
 
 You need [Node.js](https://nodejs.org) 20 or newer.
@@ -63,6 +65,7 @@ Privacy: nothing was sent anywhere except to the server being tested (and its lo
 | **No secrets leaked** | Keys, passwords, server folders and stack traces in error messages |
 | **Login setup follows the spec** | Only when a server needs a login: the OAuth details AI apps need to log in |
 | **Resources and prompts work** | Only when a server has them: each opens, content matches its type, inputs are used |
+| **Tools work together** | Only when tools chain: one tool's answer (like an ID) is passed to the next tool, which must be able to use it |
 
 ## How to read the score
 
@@ -74,7 +77,7 @@ The score is plain arithmetic, so you can check it yourself.
    |---|---|
    | Connects, Every tool is described | 15 each |
    | Newest MCP version, Lists its tools, Safety labels, No hidden instructions, Good inputs, Bad inputs | 10 each |
-   | Login setup, Resources and prompts (only when the server has them) | 10 each |
+   | Login setup, Resources and prompts, Tools work together (only when they apply) | 10 each |
    | Fast enough, No secrets leaked | 5 each |
 
 2. **Checks that could not run don't count, either way.** The score is points earned out of the points that were actually tested, so a server isn't punished for something we couldn't try.
