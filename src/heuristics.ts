@@ -129,9 +129,15 @@ export function hollowTools(calls: ToolCallRecord[]): HollowTool[] {
     const empty = isEmptySuccess(body(good));
     if (sameForBad && empty) out.push({ tool, serious: true, reason: `answers ${short(body(good))} whatever we send, even with inputs missing. It claims success but returns no data.` });
     else if (empty) out.push({ tool, serious: false, reason: `answers ${short(body(good))} with no actual data` });
-    else if (sameForBad) out.push({ tool, serious: false, reason: 'gives the exact same answer to bad input as to good input, so it may be ignoring what it is sent' });
+    // When our good call sent no inputs, a tool that drops a bad optional input answers the same
+    // without ignoring anything real. The wrong-type check already reports that.
+    else if (sameForBad && sentSomething(good)) out.push({ tool, serious: false, reason: 'gives the exact same answer to bad input as to good input, so it may be ignoring what it is sent' });
   }
   return out;
+}
+
+function sentSomething(c: ToolCallRecord): boolean {
+  return !!c.arguments && typeof c.arguments === 'object' && Object.keys(c.arguments).length > 0;
 }
 
 function short(text: string): string {

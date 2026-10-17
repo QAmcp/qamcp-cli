@@ -50,6 +50,14 @@ test('hollow: a real answer that refuses bad input is fine', () => {
   assert.equal(hollowTools([call('get_order', 'good-input', '{"order":"A1","total":12}'), call('get_order', 'bad-input', '[missing] "order_id" is required', 'tool-error')]).length, 0);
 });
 
+test('hollow: same answer counts only when our good call sent an input', () => {
+  const list = 'Showing 1-10 of 21354 tools: Adobe, Microsoft, ChatGPT';
+  const bad = call('atlas_search', 'bad-input', `[wrong type for "q"] ${list}`);
+  assert.equal(hollowTools([call('atlas_search', 'good-input', list), bad]).length, 0);
+  const sent = { ...call('atlas_search', 'good-input', list), arguments: { q: 'crm' } };
+  assert.equal(hollowTools([sent, bad]).length, 1);
+});
+
 import { INTERNAL_PATTERNS, allMatches } from '../src/patterns.js';
 
 test('leaks: finds server paths and secrets files, the fault-server case included', () => {
