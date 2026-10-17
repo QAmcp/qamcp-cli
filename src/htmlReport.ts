@@ -12,7 +12,7 @@ import { topFixes } from './report.js';
 import type { CheckResult, Finding, Report, Status } from './types.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const REPO = 'https://github.com/abhiramreddykalluru01-debug/qamcp-cli';
+const REPO = 'https://github.com/QAmcp/qamcp-cli';
 
 export interface HtmlOptions {
   title?: string; // a friendlier name than the server's own, e.g. "Acme MCP server"

@@ -39,7 +39,7 @@ This starts an MCP server we broke on purpose, on your computer only, tests it, 
 | `list_projects` | No label, but only reads | Not run in safe mode; runs with `--owner` |
 | `get_weather` | Nothing: the healthy control | ✅ Works |
 
-If you find a broken server QAmcp misses, [tell us](https://github.com/abhiramreddykalluru01-debug/qamcp-cli/issues).
+If you find a broken server QAmcp misses, [tell us](https://github.com/QAmcp/qamcp-cli/issues).
 
 ## A sample report
 
@@ -174,7 +174,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: abhiramreddykalluru01-debug/qamcp-cli@v0
+      - uses: QAmcp/qamcp-cli@v0
         with:
           url: https://your-server.com/mcp
           fail-under: 80
@@ -208,7 +208,7 @@ console.log(report.score, report.checks);
 
 ## Problems or ideas
 
-[Open an issue](https://github.com/abhiramreddykalluru01-debug/qamcp-cli/issues). If QAmcp gets something wrong about your server, please tell us: being fair matters more to us than anything else.
+[Open an issue](https://github.com/QAmcp/qamcp-cli/issues). If QAmcp gets something wrong about your server, please tell us: being fair matters more to us than anything else.
 
 ## License
 

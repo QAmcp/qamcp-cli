@@ -29,7 +29,7 @@ test('fully offline: no scripts, no stylesheets or fonts fetched, fonts built in
   assert.doesNotMatch(html, /<script|<link\b|@import|src="https?:|url\(https?:/i);
   assert.match(html, /data:font\/woff2;base64,/);
   // the only web addresses are plain links a reader may choose to click
-  for (const m of html.matchAll(/https?:\/\/[^"'\s<)]+/g)) assert.ok(/github\.com\/abhiramreddykalluru01-debug\/qamcp-cli|mcp\.example\.com/.test(m[0]), m[0]);
+  for (const m of html.matchAll(/https?:\/\/[^"'\s<)]+/g)) assert.ok(/github\.com\/QAmcp\/qamcp-cli|mcp\.example\.com/.test(m[0]), m[0]);
 });
 
 test('a failing server: FAIL stamp, failures listed apart from advisories, numbered test items', () => {

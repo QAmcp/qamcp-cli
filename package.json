@@ -18,13 +18,13 @@
   ],
   "license": "MIT",
   "author": "Abhiram Reddy Kalluru",
-  "homepage": "https://github.com/abhiramreddykalluru01-debug/qamcp-cli#readme",
+  "homepage": "https://github.com/QAmcp/qamcp-cli#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/abhiramreddykalluru01-debug/qamcp-cli.git"
+    "url": "git+https://github.com/QAmcp/qamcp-cli.git"
   },
   "bugs": {
-    "url": "https://github.com/abhiramreddykalluru01-debug/qamcp-cli/issues"
+    "url": "https://github.com/QAmcp/qamcp-cli/issues"
   },
   "type": "module",
   "bin": {
