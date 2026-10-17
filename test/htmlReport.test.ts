@@ -79,9 +79,21 @@ test('noindex only when asked: a page shared by link stays out of search engines
   assert.match(toHtml(r, { noindex: true }), /<meta name="robots" content="noindex, nofollow">/);
 });
 
+test('a login wall shows what passed from outside and what is behind the login, never empty columns', () => {
+  const oauth = check('oauth', 'Login setup follows the spec', 'pass', [{ status: 'pass', message: 'PKCE with S256 is supported.' }, { status: 'pass', message: 'AI apps can register themselves.' }]);
+  const html = toHtml(report([check('connect', 'Connects', 'fail', [{ status: 'fail', message: 'needs a login' }]), oauth], { notScored: 'needs a login', score: 0 }));
+  assert.match(html, /Login setup: passed all 2 checks/);
+  assert.match(html, /Checked from outside <span class="count">2<\/span>/);
+  assert.match(html, /Behind the login: not tested yet <span class="count">10<\/span>/);
+  assert.doesNotMatch(html, /Failures: fix these first|Nothing failed\./);
+});
+
 test('a normal report has no login box and no NEEDS LOGIN rows', () => {
   const html = toHtml(report([check('connect', 'Connects', 'pass', [{ status: 'pass', message: 'Connected in 80 ms' }])]));
   assert.doesNotMatch(html, /NEEDS LOGIN|Test everything behind the login/);
+  // a fully tested server keeps the normal layout
+  assert.match(html, /Failures: fix these first/);
+  assert.doesNotMatch(html, /Checked from outside/);
 });
 
 test('every result has a drawn mark and a word, so colour is never the only signal', () => {

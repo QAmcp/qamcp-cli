@@ -68,6 +68,7 @@ export function toHtml(r: Report, opts: HtmlOptions = {}): string {
     <div class="label">Result</div>
     ${verdict.word === 'NOT SCORED' ? '' : `<div class="score"><span class="n">${r.score}</span><span class="of">/ 100</span></div>`}
     <div class="stamp ${verdict.cls}">${esc(verdict.word)}</div>
+    ${loginWall ? loginLine(r) : ''}
     <div class="cov">${loginWall ? `Login setup checked · ${items.filter((x) => BEHIND.has(x.check)).length} checks behind the login` : `${r.coverage.checksRun} of ${r.coverage.checksTotal} checks · ${r.coverage.toolsRun} of ${r.coverage.toolsTotal} tools run`}</div>
     ${r.notScored ? `<p class="note">${notScoredHtml(r.notScored)}</p>` : ''}
     ${capNote(r)}
@@ -75,8 +76,7 @@ export function toHtml(r: Report, opts: HtmlOptions = {}): string {
 </section>
 
 <div class="cols">
-  ${column('fail', 'Failures: fix these first', fails, 'Nothing failed.')}
-  ${column('warn', 'Advisories: worth fixing', advisories, 'No advisories.')}
+  ${loginWall ? outsideColumns(r, items) : `${column('fail', 'Failures: fix these first', fails, 'Nothing failed.')}\n  ${column('warn', 'Advisories: worth fixing', advisories, 'No advisories.')}`}
 </div>
 
 <section class="items" aria-labelledby="items">
@@ -159,6 +159,36 @@ function behindLogin(r: Report): CheckResult[] {
 // "Connects" behind a login wall: we reached the server, and it asked for a login.
 function reachedLogin(c: CheckResult): CheckResult {
   return { ...c, status: 'skip', findings: [{ status: 'skip', message: 'Reached the server. It asks for a login before anything else, which is normal and not a fault.' }] };
+}
+
+// Behind a login, what could be checked from outside is the login setup: say how it went,
+// right under the stamp, so "not scored" never reads as "nothing tested".
+function loginLine(r: Report): string {
+  const login = r.checks.find((c) => c.id === 'oauth');
+  if (!login) return '';
+  const total = login.findings.length;
+  const bad = login.findings.filter((f) => f.status === 'fail' || f.status === 'warn').length;
+  return bad
+    ? `<div class="outside warn">${mark('warn')}<span>Login setup: ${bad} of ${total} checks need a look</span></div>`
+    : `<div class="outside pass">${mark('pass')}<span>Login setup: passed all ${total} checks</span></div>`;
+}
+
+// The two columns on a login-wall page: what passed from outside, and what's behind the login.
+function outsideColumns(r: Report, items: { check: CheckResult; code: string }[]): string {
+  const login = items.find((x) => x.check.id === 'oauth');
+  const behind = items.filter((x) => BEHIND.has(x.check));
+  const passed = login
+    ? login.check.findings.map((f, j) => `<div class="item">${mark(f.status)}<span class="code">${login.code}.${j + 1}</span><p>${findingText(f)}</p></div>`).join('\n    ')
+    : `<p class="empty">The server gave nothing to check from outside.</p>`;
+  return `<section class="col pass" aria-labelledby="h-out">
+    <h2 id="h-out">Checked from outside <span class="count">${login ? login.check.findings.length : 0}</span></h2>
+    ${passed}
+  </section>
+  <section class="col behind" aria-labelledby="h-behind">
+    <h2 id="h-behind">Behind the login: not tested yet <span class="count">${behind.length}</span></h2>
+    ${behind.map((x) => `<div class="item">${mark('skip')}<span class="code">${x.code}</span><p>${esc(x.check.title)}</p></div>`).join('\n    ')}
+    <p class="more"><a href="#nx">Test them with your own login →</a></p>
+  </section>`;
 }
 
 function nextStep(r: Report): string {
@@ -352,6 +382,12 @@ details[open] .chev{transform:rotate(180deg)}
 .fd{display:grid;grid-template-columns:20px 64px 1fr;gap:10px;align-items:start;padding:8px 0}
 .fd .mk{width:17px;height:17px;margin-top:2px}
 .fd p{font-size:15px;line-height:1.45;max-width:72ch;overflow-wrap:anywhere}
+.outside{display:flex;gap:8px;align-items:center;margin-top:14px;font:600 15px/1.3 var(--text)}
+.outside.pass{color:var(--pass)}.outside.warn{color:var(--rose)}
+.outside .mk{width:18px;height:18px;flex:none}
+.col.pass h2{color:var(--pass)}
+.col.behind h2{color:var(--soft)}
+.col.behind .more a{color:var(--rose);font-weight:700;text-decoration:none}
 .next{margin-top:48px;padding:22px 24px;background:var(--sheet);border:1px solid var(--rule);border-left:3px solid var(--rose);border-radius:12px;max-width:88ch}
 .next p{color:var(--soft);font-size:15px;margin-top:8px}
 .next .cmd{margin:14px 0 4px;padding:12px 14px;background:var(--ground);border:1px solid var(--rule);border-radius:8px;font-family:var(--mono);font-size:14px;color:var(--ink);white-space:pre-wrap;word-break:break-all;font-variant-ligatures:none}
