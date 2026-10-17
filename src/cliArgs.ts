@@ -3,6 +3,7 @@
 export const USAGE = `Usage:
   qamcp <server-link> [options]            test a server on the internet
   qamcp --stdio "<command>" [options]      test a server that runs as a program on this computer
+  qamcp --demo                             try it without a server: tests a demo server we broke on purpose
 
 What to test
   --header "Name: value"     send a header, e.g. "Authorization: Bearer abc123" (can repeat)
@@ -35,6 +36,7 @@ QAmcp sends nothing anywhere except to the server you test. No AI, no tracking.`
 
 export interface Args {
   url?: string;
+  demo?: boolean; // test our own demo server, broken on purpose (no server of your own needed)
   stdio?: { command: string; args: string[]; env: Record<string, string>; cwd?: string };
   headers: Record<string, string>;
   safety: 'none' | 'labeled' | 'owner' | 'all';
@@ -92,6 +94,7 @@ export function parseArgs(argv: string[]): Args {
       case '--login': a.login = true; break;
       case '--timeout': a.timeoutMs = num(++i, f) * 1000; break;
       case '--look-only': a.safety = 'none'; break;
+      case '--demo': a.demo = true; break;
       case '--owner': a.safety = 'owner'; break;
       case '--run-unlabeled': a.safety = 'all'; break;
       case '--fail-under': a.failUnder = num(++i, f); break;
@@ -111,6 +114,10 @@ export function parseArgs(argv: string[]): Args {
     }
   }
   if (a.help) return a;
+  if (a.demo) {
+    if (a.url || stdioLine !== undefined) throw new UsageError('--demo tests our own demo server; leave out the server link.');
+    return a;
+  }
 
   if (stdioLine !== undefined) {
     if (a.url) throw new UsageError('Give either a server link or --stdio, not both.');

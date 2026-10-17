@@ -157,3 +157,13 @@ test('says plainly that nothing is sent anywhere else, and never asks for a key'
   assert.doesNotMatch(r.out, /AI key|GROQ|OPENAI/i);
 });
 
+
+test('--demo: one command, no server needed, writes the report page', () => {
+  const page = join(dir, 'demo.html');
+  const r = qamcp(['--demo', '--html', page]);
+  assert.equal(r.code, 0);
+  assert.match(r.out, /Demo: testing an MCP server we broke on purpose/);
+  assert.match(r.out, /hidden <IMPORTANT> block/);
+  assert.ok(existsSync(page));
+  assert.equal(qamcp(['--demo', 'https://x.io/mcp']).code, 2);
+});

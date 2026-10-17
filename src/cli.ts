@@ -7,6 +7,7 @@ import { openInBrowser } from './oauth.js';
 import { toHtml } from './htmlReport.js';
 import { formatReport } from './report.js';
 import { runTest } from './runTest.js';
+import { startDemoServer } from './demoServer.js';
 import type { Report } from './types.js';
 
 let args: Args;
@@ -38,6 +39,16 @@ if (args.baseline) {
   }
 }
 
+// --demo: start an MCP server broken on purpose, on this computer only, and test it.
+const demo = args.demo ? await startDemoServer() : undefined;
+if (demo) {
+  args.url = demo.url;
+  args.timeoutMs ??= 5_000;
+  args.html ??= 'qamcp-demo-report.html';
+  console.log('Demo: testing an MCP server we broke on purpose. It runs only on this computer, only for this test.');
+  console.log('It hides a prompt injection, a leaked password, a tool that never answers, and more. Watch what QAmcp finds.\n');
+}
+
 const target = args.url ?? `stdio:${[args.stdio!.command, ...args.stdio!.args].join(' ')}`;
 console.log(`Testing ${target} …`);
 
@@ -58,6 +69,7 @@ const report = await runTest(target, {
   timeoutMs: args.timeoutMs,
   stdio: args.stdio,
 });
+demo?.close();
 console.log(formatReport(report));
 
 // Compare, decide, and write the outputs CI wants.

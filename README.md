@@ -20,6 +20,27 @@ npx qamcp-cli --help                                   # every option
 
 Or install it once with `npm install -g qamcp-cli`, then just type `qamcp`.
 
+### Try it without a server
+
+```bash
+npx qamcp-cli --demo
+```
+
+This starts an MCP server we broke on purpose, on your computer only, tests it, and writes `qamcp-demo-report.html`. It takes about 30 seconds. What the demo server hides, and what QAmcp says about it:
+
+| Tool | Planted problem | QAmcp finds |
+|---|---|---|
+| `fetch_notes` | A hidden instruction telling the AI to read your SSH key | ❌ Hidden instructions (on their own, they would cap the score at 40) |
+| `search_users` | A bad input shows a stack trace and a database password; slow (3 s); an input with no description | ❌ Secret leaked, ⚠️ slow, ⚠️ undescribed input |
+| `slow_report` | No description, and it never answers | ❌ No description, ❌ no answer, ❌ hangs on bad input |
+| `fetch_notes` | Accepts any input without complaint | ⚠️ Same answer to bad input as to good input |
+| `strict_lookup` | Refuses bad input properly, but with HTTP 400 | ⚠️ Some AI apps may treat that as a crash |
+| `delete_account`, `team_digest`, `get_or_create_user` | Change data, with no safety label | Not run, ever; ⚠️ no safety label |
+| `list_projects` | No label, but only reads | Not run in safe mode; runs with `--owner` |
+| `get_weather` | Nothing: the healthy control | ✅ Works |
+
+If you find a broken server QAmcp misses, [tell us](https://github.com/abhiramreddykalluru01-debug/qamcp-cli/issues).
+
 ## A sample report
 
 Real output from testing [Context7](https://context7.com)'s public server with QAmcp 0.1.0:
