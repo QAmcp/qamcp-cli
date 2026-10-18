@@ -76,7 +76,7 @@ export function toHtml(r: Report, opts: HtmlOptions = {}): string {
 </section>
 
 <div class="cols">
-  ${loginWall ? outsideColumns(r, items) : `${column('fail', 'Failures: fix these first', fails, 'Nothing failed.')}\n  ${column('warn', 'Advisories: worth fixing', advisories, 'No advisories.')}`}
+  ${loginWall ? outsideColumns(r, items) : `${column('fail', 'Failures: fix these first', fails, 'Nothing failed.')}\n  ${column('warn', 'Notes: worth fixing', advisories, 'No notes.')}`}
 </div>
 
 <section class="items" aria-labelledby="items">
@@ -224,18 +224,18 @@ function numbers(html: string): string {
 
 function mark(s: Status | 'warn' | 'fail'): string {
   const id = s === 'fail' ? 'x' : s === 'warn' ? 'w' : s === 'pass' ? 'ok' : 'na';
-  const label = s === 'fail' ? 'Failed' : s === 'warn' ? 'Advisory' : s === 'pass' ? 'Passed' : 'Not tested';
+  const label = s === 'fail' ? 'Failed' : s === 'warn' ? 'Note' : s === 'pass' ? 'Passed' : 'Not tested';
   return `<svg class="mk ${s}" role="img" aria-label="${label}"><use href="#${id}"/></svg>`;
 }
 
 function statusWord(s: Status): string {
-  return { pass: 'PASS', warn: 'ADVISORY', fail: 'FAIL', skip: 'NOT TESTED' }[s];
+  return { pass: 'PASS', warn: 'NOTE', fail: 'FAIL', skip: 'NOT TESTED' }[s];
 }
 
 function verdictOf(r: Report): { word: string; cls: string } {
   if (r.notScored) return { word: 'NOT SCORED', cls: 'skip' };
   if (r.checks.some((c) => c.status === 'fail')) return { word: 'FAIL', cls: 'fail' };
-  if (r.checks.some((c) => c.status === 'warn')) return { word: 'PASS · ADVISORIES', cls: 'pass' };
+  if (r.checks.some((c) => c.status === 'warn')) return { word: 'PASS · WITH NOTES', cls: 'pass' };
   return { word: 'PASS', cls: 'pass' };
 }
 

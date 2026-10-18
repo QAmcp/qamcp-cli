@@ -42,11 +42,11 @@ test('a failing server: FAIL stamp, failures listed apart from advisories, numbe
     ]),
   );
   assert.match(html, /class="stamp fail">FAIL</);
-  const failures = html.slice(html.indexOf('Failures: fix these first'), html.indexOf('Advisories: worth fixing'));
+  const failures = html.slice(html.indexOf('Failures: fix these first'), html.indexOf('Notes: worth fixing'));
   assert.match(failures, /looks like a password/);
   assert.doesNotMatch(failures, /Slowest tool/);
   // the version advisory, true but the least useful, comes after the others
-  const adv = html.slice(html.indexOf('Advisories: worth fixing'), html.indexOf('All test items'));
+  const adv = html.slice(html.indexOf('Notes: worth fixing'), html.indexOf('All test items'));
   assert.ok(adv.indexOf('Slowest tool') < adv.indexOf('older MCP version'));
   assert.match(html, /T-3\.1/);
   assert.match(html, /<span class="num">3\.0 s<\/span>/); // measurements in lined-up digits with their unit
@@ -62,7 +62,7 @@ test('a login wall: NOT SCORED, no score shown, and the login is not listed as a
   const html = toHtml(report([check('connect', 'Connects', 'fail', [{ status: 'fail', message: 'The server needs a login key. Add it and test again.' }])], { notScored: 'needs a login', score: 0 }));
   assert.match(html, /class="stamp skip">NOT SCORED</);
   assert.doesNotMatch(html, /class="n">0</);
-  const failures = html.slice(html.indexOf('Failures: fix these first'), html.indexOf('Advisories: worth fixing'));
+  const failures = html.slice(html.indexOf('Failures: fix these first'), html.indexOf('Notes: worth fixing'));
   assert.doesNotMatch(failures, /login key/);
   assert.match(html, /A login wall is not a fault/);
   // reaching a login is not a failed connection, and every check behind it is listed as not tested
