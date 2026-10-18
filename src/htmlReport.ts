@@ -69,7 +69,7 @@ export function toHtml(r: Report, opts: HtmlOptions = {}): string {
     ${verdict.word === 'NOT SCORED' ? '' : `<div class="score"><span class="n">${r.score}</span><span class="of">/ 100</span></div>`}
     <div class="stamp ${verdict.cls}">${esc(verdict.word)}</div>
     ${loginWall ? loginLine(r) : ''}
-    <div class="cov">${loginWall ? `Login setup checked · ${items.filter((x) => BEHIND.has(x.check)).length} checks behind the login` : `${r.coverage.checksRun} of ${r.coverage.checksTotal} checks · ${r.coverage.toolsRun} of ${r.coverage.toolsTotal} tools run`}</div>
+    <div class="cov">${loginWall ? `Login setup checked · ${items.filter((x) => BEHIND.has(x.check)).length} checks behind the login` : `${r.coverage.checksRun < r.coverage.checksTotal && !r.notScored ? 'Partial score: ' : ''}${r.coverage.checksRun} of ${r.coverage.checksTotal} checks · ${r.coverage.toolsRun} of ${r.coverage.toolsTotal} tools run`}</div>
     ${r.notScored ? `<p class="note">${notScoredHtml(r.notScored)}</p>` : ''}
     ${capNote(r)}
   </div>

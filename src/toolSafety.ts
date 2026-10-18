@@ -112,7 +112,7 @@ export function decideRun(tool: Tool, mode: SafetyMode): RunDecision {
   if (a?.readOnlyHint === true) {
     // Labels are only hints from the server. If the tool clearly says it writes, believe that.
     const contradiction = writeSignal(tool, true);
-    if (contradiction) return { run: false, why: `labeled read-only, but its ${contradiction}` };
+    if (contradiction) return { run: false, why: `labeled read-only, but its ${contradiction}, which usually means it changes something. Skipped to be safe: if it only reads, a clearer ${contradiction.startsWith('name') ? 'name' : 'description'} helps AI apps too, or test again with --owner` };
     return { run: true, why: 'labeled read-only' };
   }
   if (mode === 'labeled') return { run: false, why: 'no safety label (if you own this server, test again in owner mode)' };

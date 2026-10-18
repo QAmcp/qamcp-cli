@@ -78,3 +78,9 @@ test('accusing a read-only label needs two signals (real GENOSYS case: create_ba
   // Still not run on one signal alone: caution for running, proof for accusing.
   assert.equal(decideRun(bagLink, 'labeled').run, false);
 });
+
+test('a read-only tool skipped only for its name says why and what to do', () => {
+  const d = decideRun(tool('add', 'Adds two numbers.', { readOnlyHint: true }, ['a', 'b']), 'labeled') as any;
+  assert.equal(d.run, false);
+  assert.match(d.why, /labeled read-only, but its name starts with "add", which usually means it changes something\. Skipped to be safe: if it only reads, a clearer name helps AI apps too, or test again with --owner/);
+});

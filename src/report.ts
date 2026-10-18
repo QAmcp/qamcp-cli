@@ -11,7 +11,8 @@ export function formatReport(r: Report): string {
   if (r.protocol) lines.push(`MCP version: ${r.protocol.version ?? 'unknown'} (${r.protocol.transport})`);
   lines.push('');
   const retry = r.notScored === 'needs a login' ? 'Test again with --login (or add a key with --header).' : 'Try again in a minute.';
-  lines.push(r.notScored ? `NOT SCORED: this server ${r.notScored}. ${retry}` : `SCORE: ${r.score}/100`);
+  const partial = !r.notScored && r.coverage.checksRun < r.coverage.checksTotal;
+  lines.push(r.notScored ? `NOT SCORED: this server ${r.notScored}. ${retry}` : `SCORE: ${r.score}/100${partial ? ` · partial: ${r.coverage.checksRun} of ${r.coverage.checksTotal} checks, ${r.coverage.toolsRun} of ${r.coverage.toolsTotal} tools ran` : ''}`);
   const cap = r.scoreCaps?.length ? [...r.scoreCaps].sort((a, b) => a.max - b.max)[0] : undefined;
   if (cap && r.scoreBeforeCaps !== undefined && r.scoreBeforeCaps > r.score) lines.push(`(Would be ${r.scoreBeforeCaps}, but capped at ${cap.max} because ${cap.reason}.)`);
   const { checksRun, checksTotal, toolsRun, toolsTotal } = r.coverage;

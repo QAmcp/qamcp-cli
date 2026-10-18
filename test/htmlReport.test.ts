@@ -107,3 +107,14 @@ test('a capped score explains its ceiling', () => {
   const html = toHtml(report([check('hidden', 'No hidden instructions', 'fail', [{ status: 'fail', message: 'x' }])], { score: 40, scoreBeforeCaps: 85, scoreCaps: [{ max: 40, reason: 'hidden instructions in tool descriptions' }] }));
   assert.match(html, /Would be <span class="num">85<\/span>, but capped at <span class="num">40<\/span> because hidden instructions/);
 });
+
+test('a score from only some of the checks is marked partial; a full one is not', () => {
+  assert.match(toHtml(report([])), /Partial score: 3 of 10 checks/);
+  assert.doesNotMatch(toHtml(report([], { coverage: { checksRun: 10, checksTotal: 10, toolsRun: 3, toolsTotal: 3 } })), /Partial score/);
+});
+
+test('the terminal score line says partial when not every check could run', async () => {
+  const { formatReport } = await import('../src/report.js');
+  assert.match(formatReport(report([], { score: 100, coverage: { checksRun: 7, checksTotal: 10, toolsRun: 0, toolsTotal: 1 } })), /SCORE: 100\/100 · partial: 7 of 10 checks, 0 of 1 tools ran/);
+  assert.match(formatReport(report([], { score: 100, coverage: { checksRun: 10, checksTotal: 10, toolsRun: 1, toolsTotal: 1 } })), /SCORE: 100\/100\n/);
+});
