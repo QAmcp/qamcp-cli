@@ -100,3 +100,12 @@ test('a broken field repeated in every list item is said once, with a count (rea
   assert.equal(schemaIssueWords(sdk), 'images/*/zap_total_sats must be number (in 10 items)');
   assert.equal(schemaIssueWords('data/total must be integer, data/items/0/id must be string'), 'total must be integer; items/*/id must be string');
 });
+
+test('tool list missing a field the 2026-07-28 version requires is said in plain words (real DeepDNA case)', async () => {
+  const { toolListError } = await import('../src/runTest.js');
+  const raw = 'Invalid result for tools/list: [ { "expected": "number", "code": "invalid_type", "path": [ "ttlMs" ], "message": "Invalid input: expected number, received undefined" } ]';
+  const said = toolListError(raw);
+  assert.equal(said, `The server says it supports the newest MCP version (2026-07-28), but its tool list reply is missing "ttlMs", which that version requires, so AI apps on that version can't load its tools`);
+  assert.doesNotMatch(said, /"code"|Invalid result/);
+  assert.match(toolListError('something else broke'), /^Asking for the tool list failed: something else broke/);
+});

@@ -580,7 +580,23 @@ function serverSaid(err: unknown): string {
 export function toolListError(raw: string): string {
   if (/missing required resultType/i.test(raw))
     return `The server says it supports the newest MCP version (2026-07-28), but its tool list reply is missing the "resultType" field that version requires, so AI apps on that version can't load its tools`;
+  // Only the 2026-07-28 rules check the reply's fields like this, so the server claimed that version.
+  const missing = missingResultFields(raw);
+  if (missing.length)
+    return `The server says it supports the newest MCP version (2026-07-28), but its tool list reply is missing ${missing.map((m) => `"${m}"`).join(' and ')}, which that version requires, so AI apps on that version can't load its tools`;
   return `Asking for the tool list failed: ${short(raw, 160)}`;
+}
+
+// "Invalid result for tools/list: [ { "path": [ "ttlMs" ], "message": "... received undefined" } ]" → ["ttlMs"]
+export function missingResultFields(raw: string): string[] {
+  const list = raw.match(/Invalid result for [\w/]+: (\[[\s\S]*\])/)?.[1];
+  if (!list) return [];
+  try {
+    const issues = JSON.parse(list) as { path?: unknown[]; message?: string }[];
+    return [...new Set(issues.filter((i) => Array.isArray(i.path) && i.path.length && /received undefined/.test(i.message ?? '')).map((i) => i.path!.join('.')))];
+  } catch {
+    return [];
+  }
 }
 
 function explainConnectError(err: unknown, isProgram = false): string {
