@@ -2,6 +2,8 @@
 
 [![npm](https://img.shields.io/npm/v/qamcp-cli)](https://www.npmjs.com/package/qamcp-cli) [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
+![QAmcp CLI in action](assets/qamcp-demo.gif)
+
 **QAmcp tests MCP servers for the people who build them: it connects like an AI app does and tells you, in plain words, what's broken.**
 
 Every result is a hard fact (pass or fail, milliseconds, exact matches). No AI judges anything, and nothing is sent anywhere except to the server you test.
