@@ -25,6 +25,7 @@ For CI (run on every change)
   --baseline <file.json>     compare with a saved report; exit 1 if the score dropped or a check got worse
   --max-drop <points>        how far the score may fall below the baseline (default 5)
   --save-baseline <file>     save this report to use as a baseline next time
+  --install-hook             install a git pre-commit hook to verify your MCP server before each commit
   --junit <file.xml>         write a JUnit XML report
   --markdown <file.md>       write a short report for pull-request comments
   --json <file.json>         write the full report
@@ -47,6 +48,7 @@ export interface Args {
   baseline?: string;
   maxDrop: number;
   saveBaseline?: string;
+  installHook?: boolean;
   junit?: string;
   markdown?: string;
   json?: string;
@@ -95,6 +97,7 @@ export function parseArgs(argv: string[]): Args {
       case '--timeout': a.timeoutMs = num(++i, f) * 1000; break;
       case '--look-only': a.safety = 'none'; break;
       case '--demo': a.demo = true; break;
+      case '--install-hook': a.installHook = true; break;
       case '--owner': a.safety = 'owner'; break;
       case '--run-unlabeled': a.safety = 'all'; break;
       case '--fail-under': a.failUnder = num(++i, f); break;
@@ -114,6 +117,10 @@ export function parseArgs(argv: string[]): Args {
     }
   }
   if (a.help) return a;
+  if (a.installHook) {
+    if (a.url || stdioLine !== undefined) throw new UsageError('--install-hook sets up a git pre-commit hook; leave out the server link.');
+    return a;
+  }
   if (a.demo) {
     if (a.url || stdioLine !== undefined) throw new UsageError('--demo tests our own demo server; leave out the server link.');
     return a;

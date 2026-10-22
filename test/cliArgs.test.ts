@@ -66,3 +66,8 @@ test('--help is accepted on its own', () => {
 test('--look-only sets the no-calls safety mode', () => {
   assert.equal(parseArgs(['https://x.io/mcp', '--look-only']).safety, 'none');
 });
+
+test('--install-hook is accepted on its own', () => {
+  assert.equal(parseArgs(['--install-hook']).installHook, true);
+  bad(['https://x.io', '--install-hook'], /--install-hook sets up a git pre-commit hook/);
+});

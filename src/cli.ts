@@ -23,6 +23,34 @@ if (args.help) {
   process.exit(0);
 }
 
+if (args.installHook) {
+  const gitDir = '.git';
+  if (!existsSync(gitDir)) {
+    console.error('Error: Not a git repository (could not find .git folder). Run this command from the root of your repo.');
+    process.exit(2);
+  }
+  const hooksDir = '.git/hooks';
+  if (!existsSync(hooksDir)) mkdirSync(hooksDir, { recursive: true });
+  const hookPath = '.git/hooks/pre-commit';
+  const hookContent = `#!/bin/sh
+# QAmcp pre-commit verification
+# Tests your MCP server before commit to catch crashes, leaks, and schema bugs
+echo "Running QAmcp pre-commit safety checks..."
+npx qamcp-cli --fail-under 80 || {
+  echo "QAmcp checks failed. Fix findings or commit with --no-verify."
+  exit 1
+}
+`;
+  if (existsSync(hookPath)) {
+    appendFileSync(hookPath, '\n' + hookContent);
+  } else {
+    writeFileSync(hookPath, hookContent, { mode: 0o755 });
+  }
+  console.log('✅ QAmcp pre-commit hook installed successfully in .git/hooks/pre-commit!');
+  console.log('Your MCP server will now be verified automatically before every git commit.');
+  process.exit(0);
+}
+
 // A baseline that doesn't exist yet is normal on the very first CI run: that run becomes the baseline.
 let baseline: Report | undefined;
 if (args.baseline) {

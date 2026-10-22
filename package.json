@@ -14,7 +14,12 @@
     "security",
     "oauth",
     "developer-tools",
-    "ai-agents"
+    "ai-agents",
+    "claude-desktop",
+    "cursor",
+    "anthropic",
+    "prompt-injection",
+    "mcp-security"
   ],
   "license": "MIT",
   "author": "Abhiram Reddy Kalluru",
