@@ -9,6 +9,7 @@ import { formatReport } from './report.js';
 import { runTest } from './runTest.js';
 import { startDemoServer } from './demoServer.js';
 import { installHook } from './hook.js';
+import { beforeInstall, formatBeforeInstall } from './beforeInstall.js';
 import { diffTools, formatChanges, lastTools, rememberTools } from './drift.js';
 
 // A date as the person running it sees it (their own time zone), e.g. 2026-10-24.
@@ -70,6 +71,7 @@ if (demo) {
 }
 
 const target = args.url ?? `stdio:${[args.stdio!.command, ...args.stdio!.args].join(' ')}`;
+if (args.beforeInstall && args.stdio) console.log("Note: checking a program means starting it on this computer, the same as installing it. For a server you don't know yet, check its web link instead if it has one.\n");
 console.log(`Testing ${target} …`);
 
 const login = args.login
@@ -106,7 +108,7 @@ if (report.toolDefs) {
     }
   }
 }
-console.log(formatReport(report));
+console.log(args.beforeInstall ? formatBeforeInstall(report, beforeInstall(report)) : formatReport(report));
 if (report.toolChanges) console.log(formatChanges(report.toolChanges.changes, report.toolChanges.since) + '\n');
 // One line, only for a person at a terminal: never in CI logs or a git hook's output.
 if (process.stdout.isTTY && !process.env.CI && !process.env.GIT_INDEX_FILE) console.log('⭐ Found this useful? A star helps others find QAmcp: https://github.com/QAmcp/qamcp-cli\n');

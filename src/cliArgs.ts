@@ -4,6 +4,7 @@ export const USAGE = `Usage:
   qamcp <server-link> [options]            test a server on the internet
   qamcp --stdio "<command>" [options]      test a server that runs as a program on this computer
   qamcp --demo                             try it without a server: tests a demo server we broke on purpose
+  qamcp <server-link> --before-install     about to add a server to Claude or Cursor? a quick safety look, in plain words
 
 What to test
   --header "Name: value"     send a header, e.g. "Authorization: Bearer abc123" (can repeat)
@@ -15,6 +16,8 @@ What to test
   --no-history               don't remember this server's tools between runs (used to show what changed)
 
 Which tools may run
+  --before-install           for someone about to install the server: red flags and which tools can change,
+                             send or delete things (calls no tools, like --look-only)
   --look-only                call no tools at all: only read what the server says about itself
                              (for a server you don't trust; tools, bad inputs and leaks are not tested)
   --owner                    I own this server: also run unlabeled tools whose names clearly only read
@@ -50,7 +53,8 @@ export interface Args {
   failUnder?: number;
   failOnFail: boolean;
   failOnToolChange?: boolean;
-  noHistory?: boolean; // don't keep this server's tool list between runs
+  noHistory?: boolean;
+  beforeInstall?: boolean; // the plain-words safety look for someone about to install the server // don't keep this server's tool list between runs
   baseline?: string;
   maxDrop: number;
   saveBaseline?: string;
@@ -103,6 +107,7 @@ export function parseArgs(argv: string[]): Args {
       case '--login': a.login = true; break;
       case '--timeout': a.timeoutMs = num(++i, f) * 1000; break;
       case '--look-only': a.safety = 'none'; break;
+      case '--before-install': a.beforeInstall = true; a.safety = 'none'; break;
       case '--demo': a.demo = true; break;
       case '--install-hook': a.installHook = true; break;
       case '--owner': a.safety = 'owner'; break;
@@ -126,6 +131,7 @@ export function parseArgs(argv: string[]): Args {
     }
   }
   if (a.help) return a;
+  if (a.beforeInstall && a.safety !== 'none') throw new UsageError("--before-install calls no tools, so it can't be used with --owner or --run-unlabeled.");
   if (a.installHook) {
     // The hook has to know which server to test on every commit.
     if (!a.url && stdioLine === undefined) throw new UsageError('--install-hook needs the server to test on each commit, e.g.\n  npx qamcp-cli --install-hook --stdio "npm start"       (your server, started from this repo)\n  npx qamcp-cli --install-hook http://localhost:3000/mcp  (a server already running at this link)');

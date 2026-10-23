@@ -43,6 +43,26 @@ This starts an MCP server we broke on purpose, on your computer only, tests it, 
 
 If you find a broken server QAmcp misses, [tell us](https://github.com/QAmcp/qamcp-cli/issues).
 
+## About to install a server? Check it first
+
+Not building a server, just adding one to Claude, Cursor or another AI app? Look before you install:
+
+```bash
+npx qamcp-cli https://some-server.com/mcp --before-install
+```
+
+```
+Before you install qamcp-demo-broken-server
+
+🛑 Red flag: don't install it yet
+   • Hidden instructions in a tool description (fetch_notes): text that tells the AI to do things you didn't ask for.
+   • 1 tool can delete things: delete_account.
+   • 1 tool can change or send things: team_digest.
+   • 5 tools only read (labeled read-only).
+```
+
+It calls none of the server's tools: it reads what the server says about itself, and tells you about hidden instructions and which tools could change, send or delete things. It can't see what a server does with your data behind the scenes, so only add servers from makers you trust. You can also look the server up in the [directory](https://qamcp.github.io/directory.html).
+
 ## A sample report
 
 Real output from testing [Context7](https://context7.com)'s public server with QAmcp 0.1.0:
