@@ -25,7 +25,8 @@ For CI (run on every change)
   --baseline <file.json>     compare with a saved report; exit 1 if the score dropped or a check got worse
   --max-drop <points>        how far the score may fall below the baseline (default 5)
   --save-baseline <file>     save this report to use as a baseline next time
-  --install-hook             install a git pre-commit hook to verify your MCP server before each commit
+  --install-hook             test this server on every git commit and stop the commit if it scores below
+                             --fail-under (default 80), e.g. --install-hook --stdio "npm start"
   --junit <file.xml>         write a JUnit XML report
   --markdown <file.md>       write a short report for pull-request comments
   --json <file.json>         write the full report
@@ -49,6 +50,7 @@ export interface Args {
   maxDrop: number;
   saveBaseline?: string;
   installHook?: boolean;
+  stdioLine?: string; // the --stdio command exactly as typed (the hook runs it again on each commit)
   junit?: string;
   markdown?: string;
   json?: string;
@@ -118,8 +120,11 @@ export function parseArgs(argv: string[]): Args {
   }
   if (a.help) return a;
   if (a.installHook) {
-    if (a.url || stdioLine !== undefined) throw new UsageError('--install-hook sets up a git pre-commit hook; leave out the server link.');
-    return a;
+    // The hook has to know which server to test on every commit.
+    if (!a.url && stdioLine === undefined) throw new UsageError('--install-hook needs the server to test on each commit, e.g.\n  npx qamcp-cli --install-hook --stdio "npm start"       (your server, started from this repo)\n  npx qamcp-cli --install-hook http://localhost:3000/mcp  (a server already running at this link)');
+    if (a.demo) throw new UsageError('--install-hook and --demo can\'t be used together.');
+    if (Object.keys(env).length || cwd) throw new UsageError('--install-hook can\'t carry --env or --cwd yet: put them in the command, e.g. --stdio "cd server && npm start".');
+    a.stdioLine = stdioLine;
   }
   if (a.demo) {
     if (a.url || stdioLine !== undefined) throw new UsageError('--demo tests our own demo server; leave out the server link.');

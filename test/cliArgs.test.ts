@@ -67,7 +67,12 @@ test('--look-only sets the no-calls safety mode', () => {
   assert.equal(parseArgs(['https://x.io/mcp', '--look-only']).safety, 'none');
 });
 
-test('--install-hook is accepted on its own', () => {
-  assert.equal(parseArgs(['--install-hook']).installHook, true);
-  bad(['https://x.io', '--install-hook'], /--install-hook sets up a git pre-commit hook/);
+test('--install-hook needs the server it will test on each commit', () => {
+  bad(['--install-hook'], /--install-hook needs the server to test on each commit/);
+  const a = parseArgs(['--install-hook', '--stdio', 'npm start', '--fail-under', '90']);
+  assert.equal(a.installHook, true);
+  assert.equal(a.stdioLine, 'npm start');
+  assert.equal(a.failUnder, 90);
+  assert.equal(parseArgs(['--install-hook', 'http://localhost:3000/mcp']).url, 'http://localhost:3000/mcp');
+  bad(['--install-hook', '--stdio', 'npm start', '--cwd', 'server'], /can't carry --env or --cwd/);
 });

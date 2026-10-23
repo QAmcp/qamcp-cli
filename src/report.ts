@@ -67,10 +67,6 @@ export function formatReport(r: Report): string {
     fixes.forEach((f, i) => lines.push(`  ${i + 1}. ${f.tool && !f.message.includes(f.tool) ? f.tool + ': ' : ''}${f.message}`));
   }
   lines.push('');
-  lines.push('────────────────────────────────────────────────────────────────');
-  lines.push(' ⭐ Like QAmcp? Star us on GitHub: https://github.com/QAmcp/qamcp-cli');
-  lines.push(' 📊 Browse 265+ verified servers:  https://qamcp.github.io/directory.html');
-  lines.push('');
   return lines.join('\n');
 }
 

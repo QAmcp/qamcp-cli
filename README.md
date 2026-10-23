@@ -165,13 +165,14 @@ npx qamcp-cli https://your-server.com/mcp --look-only                           
 
 ### Pre-commit hook (test before git commit)
 
-Run this once inside your MCP server repository:
+Run this once inside your MCP server's repository, telling it how your server starts:
 
 ```bash
-npx qamcp-cli --install-hook
+npx qamcp-cli --install-hook --stdio "npm start"          # a server that runs as a program
+npx qamcp-cli --install-hook http://localhost:3000/mcp    # or one already running at a link
 ```
 
-This installs `.git/hooks/pre-commit` to automatically verify your server on every `git commit`. If your server breaks a schema or drops below 80, the commit stops before broken tools reach your users.
+From then on, every `git commit` tests your server first. If it scores below 80 (change it with `--fail-under 90`), or can't be tested, the commit stops and tells you why. Skip it once with `git commit --no-verify`. Running the command again updates the check; anything else already in your hook is kept.
 
 ### GitHub Actions (CI)
 
