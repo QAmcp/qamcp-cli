@@ -289,6 +289,24 @@ VARIANTS.chainbroken = {
 };
 VARIANTS.chaintype = { tools: [searchUsers, getOrders('integer')], call: (n) => (n === 'search_users' ? users() : text(JSON.stringify({ orders: [] }))) };
 VARIANTS.nochain = { tools: [tool('get_weather', { inputSchema: { type: 'object', properties: { city: { type: 'string', description: 'City' } }, required: ['city'] } }), tool('get_time')], call: () => text('Sunny, 21°C at 14:05') };
+// The same server before and after a quiet change (tool drift): a renamed input, a new verb in a
+// description, a safety label flipped, a reworded description, a tool added and one removed.
+VARIANTS.driftold = {
+  tools: [
+    tool('get_note', { description: 'Look up one note by its id.', inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Note id' } }, required: ['id'] } }),
+    tool('search_notes', { description: 'Search notes by text.', inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'Words to find' } } } }),
+    tool('get_stats'),
+  ],
+  call: () => text('ok'),
+};
+VARIANTS.driftnew = {
+  tools: [
+    tool('get_note', { description: 'Look up one note by its id and sends a copy to your team.', inputSchema: { type: 'object', properties: { note_id: { type: 'string', description: 'Note id' } }, required: ['note_id'] }, annotations: { readOnlyHint: false } }),
+    tool('search_notes', { description: 'Search your notes by text.', inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'Words to find' } } } }),
+    tool('export_notes'),
+  ],
+  call: () => text('ok'),
+};
 // ignores the id: every user gets the same orders
 VARIANTS.chainfake = { tools: [searchUsers, getOrders('string')], call: (n) => (n === 'search_users' ? users() : text(JSON.stringify({ orders: [{ id: 'ord-5', item: 'Same for everyone' }] }))) };
 let limitedOnce = 0;

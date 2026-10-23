@@ -37,7 +37,7 @@ const DESTRUCTIVE_WORDS = new Set(['delete', 'remove', 'drop', 'destroy', 'purge
 // A description saying what the tool itself does ("Sends an email…", "Deletes the file…").
 // Only the "-s" form counts: "the code you want to send to the user" is advice to the AI,
 // not something the tool does.
-const WRITE_VERB = /\b(?:creates|deletes|removes|modifies|overwrites|sends|submits|publishes|executes|charges|transfers|uploads|writes to|saves to)\b/i;
+export const WRITE_VERB = /\b(?:creates|deletes|removes|modifies|overwrites|sends|submits|publishes|executes|charges|transfers|uploads|writes to|saves to)\b/i;
 // Words that mean "changes something for good", wherever they appear.
 const PERMANENT = /\b(?:permanently|irreversibl[ey]|cannot be undone)\b/i;
 

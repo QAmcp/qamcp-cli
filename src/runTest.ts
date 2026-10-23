@@ -1,6 +1,7 @@
 import { ProtocolError, SdkError, SdkErrorCode, fromJsonSchema, specTypeSchemas, type Client, type Tool } from '@modelcontextprotocol/client';
 import { connect, stdoutNoise } from './connect.js';
 import { toolboxHash, toolFingerprints } from './ci.js';
+import { toToolDef } from './drift.js';
 import { chainCheck } from './chains.js';
 import { checkResourcesAndPrompts } from './resourcesPrompts.js';
 import { badReplyWords, classifyError, schemaIssueWords } from './errorKind.js';
@@ -126,6 +127,7 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
       report.toolCount = tools.length + broken.length;
       report.toolboxHash = toolboxHash(tools);
       report.toolFingerprints = toolFingerprints(tools);
+      report.toolDefs = tools.map(toToolDef);
       push(toolListCheck(tools, broken, listing.loop, sdkProblem));
     }
     if (tools.length) {

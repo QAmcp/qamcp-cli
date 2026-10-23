@@ -9,6 +9,10 @@ import { formatReport } from './report.js';
 import { runTest } from './runTest.js';
 import { startDemoServer } from './demoServer.js';
 import { installHook } from './hook.js';
+import { diffTools, formatChanges, lastTools, rememberTools } from './drift.js';
+
+// A date as the person running it sees it (their own time zone), e.g. 2026-10-24.
+const localDay = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 import type { Report } from './types.js';
 
 let args: Args;
@@ -86,13 +90,35 @@ const report = await runTest(target, {
   stdio: args.stdio,
 });
 demo?.close();
+// What changed in the tools: against the baseline in CI (the approved state), otherwise against
+// the last test of this server on this computer.
+if (report.toolDefs) {
+  if (baseline?.toolDefs) report.toolChanges = { since: `the baseline, ${localDay(baseline.testedAt)}`, changes: diffTools(baseline.toolDefs, report.toolDefs) };
+  else if (!args.noHistory && !demo) {
+    const last = lastTools(target);
+    if (last) report.toolChanges = { since: localDay(last.testedAt), changes: diffTools(last.tools, report.toolDefs) };
+  }
+  if (!args.noHistory && !demo) {
+    try {
+      rememberTools(target, report.testedAt, report.toolDefs);
+    } catch {
+      // a folder we can't write to only means no history next time
+    }
+  }
+}
 console.log(formatReport(report));
+if (report.toolChanges) console.log(formatChanges(report.toolChanges.changes, report.toolChanges.since) + '\n');
 // One line, only for a person at a terminal: never in CI logs or a git hook's output.
 if (process.stdout.isTTY && !process.env.CI && !process.env.GIT_INDEX_FILE) console.log('⭐ Found this useful? A star helps others find QAmcp: https://github.com/QAmcp/qamcp-cli\n');
 
 // Compare, decide, and write the outputs CI wants.
 const comparison = baseline ? compareReports(report, baseline) : undefined;
 const gate = evaluateGates(report, { failUnder: args.failUnder, failOnFail: args.failOnFail, maxDrop: args.maxDrop }, comparison);
+const behaviorChanges = report.toolChanges?.changes.filter((c) => c.important) ?? [];
+if (args.failOnToolChange && behaviorChanges.length && gate.exitCode !== 3) {
+  gate.exitCode = 1;
+  gate.reasons.push(`tools changed in ways that change what an AI does: ${behaviorChanges.map((c) => c.tool).join(', ')}`);
+}
 
 const write = (file: string, text: string, what: string) => {
   mkdirSync(dirname(file), { recursive: true });
@@ -135,6 +161,6 @@ if (process.env.GITHUB_OUTPUT) {
 }
 
 if (gate.exitCode !== 0) console.log(`\nCI gate: ${gate.exitCode === 3 ? 'COULD NOT TEST' : 'FAILED'}\n${gate.reasons.map((r) => `  - ${r}`).join('\n')}`);
-else if (args.failUnder !== undefined || args.failOnFail || baseline) console.log('\nCI gate: PASSED');
+else if (args.failUnder !== undefined || args.failOnFail || args.failOnToolChange || baseline) console.log('\nCI gate: PASSED');
 
 process.exit(gate.exitCode);

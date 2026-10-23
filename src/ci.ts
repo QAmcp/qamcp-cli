@@ -142,6 +142,16 @@ export function toMarkdown(report: Report, cmp?: Comparison, gate?: GateResult):
     L.push('**Fix these first**');
     fixes.forEach((f, i) => L.push(`${i + 1}. ${f.tool && !f.message.includes(f.tool) ? `\`${f.tool}\`: ` : ''}${f.message}`));
   }
+  const changed = report.toolChanges?.changes ?? [];
+  if (changed.length) {
+    L.push('');
+    L.push(`**Tools changed since ${report.toolChanges!.since}**`);
+    for (const c of changed) L.push(`- ${c.important ? '⚠️' : '·'} \`${c.tool}\`: ${c.what.join('; ')}`);
+    L.push('');
+    L.push('```diff');
+    for (const c of changed) L.push(`@@ ${c.tool} @@`, ...c.diff.split('\n').slice(0, 20));
+    L.push('```');
+  }
   if (report.dataFlow) {
     L.push('');
     L.push(`<sub>${report.dataFlow.summary}</sub>`);

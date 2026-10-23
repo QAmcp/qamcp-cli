@@ -161,6 +161,21 @@ npx qamcp-cli https://your-server.com/mcp --html report.html                    
 npx qamcp-cli https://your-server.com/mcp --look-only                              # call no tools at all: a safe first look at a server you don't trust
 ```
 
+## See what changed in a server's tools
+
+A tool whose description or inputs quietly change after you approved a server can change what an AI does with it. QAmcp remembers each server's tools on your computer (in `.qamcp/`, which git ignores), and the next test shows every change since last time:
+
+```
+Tools changed since the last test (2026-10-20): 2 tools, 1 in ways that change what an AI does
+  ⚠️  get_note: input renamed: "id" is now "note_id"; safety label readOnlyHint: true → false; description now says it "sends"
+       - description: Look up one note by its id.
+       + description: Look up one note by its id and sends a copy to your team.
+       ...
+  ·  search_notes: description reworded
+```
+
+Changes that alter behavior come first (a new, removed or renamed input, a newly required field, a changed type or safety label, new action words like "sends" or "deletes"); rewording comes last. Each shows the exact lines. In CI, `--fail-on-tool-change` stops the build on a behavior change, compared with your `--baseline`. Don't want the history? Add `--no-history`.
+
 ## Test on every change (GitHub)
 
 ### Pre-commit hook (test before git commit)

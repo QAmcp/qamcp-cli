@@ -78,7 +78,7 @@ export function toHtml(r: Report, opts: HtmlOptions = {}): string {
 <div class="cols">
   ${loginWall ? outsideColumns(r, items) : `${column('fail', 'Failures: fix these first', fails, 'Nothing failed.')}\n  ${column('warn', 'Notes: worth fixing', advisories, 'No notes.')}`}
 </div>
-
+${changesSection(r)}
 <section class="items" aria-labelledby="items">
   <h2 id="items">All test items</h2>
   <p class="hint">Open an item to see every result behind it.</p>
@@ -104,6 +104,17 @@ interface Listed {
 }
 
 const SHOW = 6; // per column; the rest are one click away in the test items
+
+// What changed in the tools since the last test: behavior changes first, each with its exact lines.
+function changesSection(r: Report): string {
+  const changes = r.toolChanges?.changes ?? [];
+  if (!changes.length) return '';
+  const line = (l: string) => `<span class="${l.startsWith('+') ? 'add' : l.startsWith('-') ? 'del' : ''}">${esc(l)}</span>`;
+  return `<section class="changes" aria-labelledby="chg">
+  <h2 id="chg">Tools changed since ${esc(r.toolChanges!.since)} <span class="count">${changes.length}</span></h2>
+  <ul>${changes.map((c) => `<li class="${c.important ? 'imp' : 'minor'}"><b>${esc(c.tool)}</b>: ${esc(c.what.join('; '))}<details><summary>Show what changed</summary><pre class="diff">${c.diff.split('\n').map(line).join('\n')}</pre></details></li>`).join('')}</ul>
+</section>`;
+}
 
 function column(kind: 'fail' | 'warn', title: string, list: Listed[], empty: string): string {
   const shown = list.slice(0, SHOW);
@@ -350,6 +361,10 @@ h1{font:700 clamp(24px,2.6vw,32px)/1.15 "Archivo Narrow","Arial Narrow",sans-ser
 .score .of{font:400 18px/1 var(--mono);color:var(--soft)}
 .stamp{width:max-content;font:700 22px/1 "Archivo Narrow","Arial Narrow",sans-serif;letter-spacing:.14em;padding:9px 14px;border:2px solid currentColor;border-radius:6px}
 .stamp.fail{color:var(--fail)}.stamp.pass{color:var(--pass)}.stamp.skip{color:var(--soft)}
+.changes{margin:28px 0}.changes ul{list-style:none;padding:0}.changes li{padding:10px 0;border-top:1px solid var(--rule)}
+.changes li.imp b{color:var(--fail)}.changes summary{cursor:pointer;color:var(--soft);font-size:14px;margin-top:4px}
+.diff{margin:8px 0 0;padding:10px 12px;border:1px solid var(--rule);border-radius:6px;overflow-x:auto;font:400 13px/1.5 var(--mono);white-space:pre-wrap}
+.diff .add{color:var(--pass)}.diff .del{color:var(--fail)}
 .cov{font:400 13.5px/1.4 var(--mono);color:var(--soft)}
 .note{font-size:14.5px;color:var(--soft);max-width:34ch}
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:32px}

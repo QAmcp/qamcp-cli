@@ -55,7 +55,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test --test-force-exit --test-concurrency=1 test/score.test.ts test/toolSafety.test.ts test/heuristics.test.ts test/oauth.test.ts test/oauthSetup.test.ts test/cliArgs.test.ts test/hook.test.ts test/ci.test.ts test/workflows.test.ts test/connectErrors.test.ts test/resourcesPrompts.test.ts test/stdio.test.ts test/signIn.test.ts test/errorKinds.test.ts test/specExam.test.ts test/chains.test.ts test/demo.test.ts test/htmlReport.test.ts test/cli.test.ts test/buggyServer.test.ts",
+    "test": "tsx --test --test-force-exit --test-concurrency=1 test/score.test.ts test/toolSafety.test.ts test/heuristics.test.ts test/oauth.test.ts test/oauthSetup.test.ts test/cliArgs.test.ts test/hook.test.ts test/drift.test.ts test/ci.test.ts test/workflows.test.ts test/connectErrors.test.ts test/resourcesPrompts.test.ts test/stdio.test.ts test/signIn.test.ts test/errorKinds.test.ts test/specExam.test.ts test/chains.test.ts test/demo.test.ts test/htmlReport.test.ts test/cli.test.ts test/buggyServer.test.ts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

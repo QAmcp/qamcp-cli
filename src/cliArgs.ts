@@ -12,6 +12,7 @@ What to test
   --cwd <folder>             folder to start the --stdio program in
   --login                    if the server needs a login, open its login page in your browser
   --timeout <seconds>        time limit per request (default 20)
+  --no-history               don't remember this server's tools between runs (used to show what changed)
 
 Which tools may run
   --look-only                call no tools at all: only read what the server says about itself
@@ -22,6 +23,8 @@ Which tools may run
 For CI (run on every change)
   --fail-under <score>       exit 1 if the score is below this
   --fail-on-fail             exit 1 if any check failed
+  --fail-on-tool-change      exit 1 if a tool changed in a way that changes what an AI does
+                             (compared with --baseline, or with the last test on this computer)
   --baseline <file.json>     compare with a saved report; exit 1 if the score dropped or a check got worse
   --max-drop <points>        how far the score may fall below the baseline (default 5)
   --save-baseline <file>     save this report to use as a baseline next time
@@ -46,6 +49,8 @@ export interface Args {
   login: boolean;
   failUnder?: number;
   failOnFail: boolean;
+  failOnToolChange?: boolean;
+  noHistory?: boolean; // don't keep this server's tool list between runs
   baseline?: string;
   maxDrop: number;
   saveBaseline?: string;
@@ -104,6 +109,8 @@ export function parseArgs(argv: string[]): Args {
       case '--run-unlabeled': a.safety = 'all'; break;
       case '--fail-under': a.failUnder = num(++i, f); break;
       case '--fail-on-fail': a.failOnFail = true; break;
+      case '--fail-on-tool-change': a.failOnToolChange = true; break;
+      case '--no-history': a.noHistory = true; break;
       case '--baseline': a.baseline = need(++i, f); break;
       case '--max-drop': a.maxDrop = num(++i, f); break;
       case '--save-baseline': a.saveBaseline = need(++i, f); break;

@@ -1,6 +1,7 @@
 import type { LoginOptions, StdioTarget } from './connect.js';
 import type { ScoreCap } from './score.js';
 import type { RunReason, SafetyMode } from './toolSafety.js';
+import type { ToolChange, ToolDef } from './drift.js';
 
 // Every check gives a hard-fact result. No opinions, no AI grading.
 export type Status = 'pass' | 'warn' | 'fail' | 'skip';
@@ -57,6 +58,8 @@ export interface Report {
   calls: ToolCallRecord[];
   toolboxHash?: string; // fingerprint of every tool's description and inputs
   toolFingerprints?: Record<string, string>; // per tool, to see exactly which tool changed
+  toolDefs?: ToolDef[]; // each tool as the server described it, to show exactly what changed between runs
+  toolChanges?: { since: string; changes: ToolChange[] }; // what changed since the last test of this server, when known
   dataFlow?: { summary: string }; // one plain sentence: what was sent where
 }
 
