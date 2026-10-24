@@ -26,11 +26,11 @@ test('the Action has the outputs the workflows rely on, and a description on eve
   for (const [k, v] of Object.entries<any>(a.inputs)) assert.ok(typeof v.description === 'string' && v.description.length > 5, k);
 });
 
-test('the daily job and the self-test only use actions with a pinned major version', () => {
+test('the daily job and the self-test only use actions pinned to a major version or an exact commit', () => {
   for (const f of ['.github/workflows/selftest.yml', 'examples/qamcp-ci.yml', 'action.yml']) {
     for (const m of readFileSync(f, 'utf8').matchAll(/uses:\s*([\w./-]+)@([\w.-]+)/g)) {
       if (m[1] === 'YOUR-ORG/QAmcp') continue;
-      assert.match(m[2], /^v\d+$/, `${f}: ${m[1]}@${m[2]}`);
+      assert.match(m[2], /^(v\d+|[0-9a-f]{40})$/, `${f}: ${m[1]}@${m[2]}`);
     }
   }
 });
