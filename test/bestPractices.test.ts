@@ -30,7 +30,7 @@ test('best practices: the two extra labels, asked only where they matter', () =>
   const c = bestPracticesCheck([tool('gh_get_issue', { readOnlyHint: true }), tool('gh_close_issue', { destructiveHint: false, openWorldHint: true })]);
   const text = c.findings.map((f) => f.message).join('\n');
   // read-only tools are naturally safe to repeat, so only the changing tool is asked about it
-  assert.match(text, /1 tool that can change things doesn't say whether running it twice is safe \(idempotentHint\): gh_close_issue/);
+  assert.match(text, /1 tool not labeled read-only doesn't say whether running it twice is safe \(idempotentHint\): gh_close_issue/);
   assert.match(text, /1 tool doesn't say whether it reaches outside services .*: gh_get_issue/);
 });
 

@@ -44,7 +44,7 @@ export function bestPracticesCheck(tools: Tool[]): CheckResult {
   const changing = tools.filter((t) => t.annotations?.readOnlyHint !== true);
   const noRepeat = changing.filter((t) => t.annotations?.idempotentHint === undefined).map((t) => t.name);
   if (noRepeat.length)
-    findings.push({ status: 'warn', message: `${plural(noRepeat.length, 'tool')} that can change things ${noRepeat.length === 1 ? "doesn't" : "don't"} say whether running ${noRepeat.length === 1 ? 'it' : 'them'} twice is safe (idempotentHint): ${list(noRepeat)}` });
+    findings.push({ status: 'warn', message: `${plural(noRepeat.length, 'tool')} not labeled read-only ${noRepeat.length === 1 ? "doesn't" : "don't"} say whether running ${noRepeat.length === 1 ? 'it' : 'them'} twice is safe (idempotentHint): ${list(noRepeat)}` });
   const noWorld = tools.filter((t) => t.annotations?.openWorldHint === undefined).map((t) => t.name);
   if (noWorld.length)
     findings.push({ status: 'warn', message: `${plural(noWorld.length, 'tool')} ${noWorld.length === 1 ? "doesn't" : "don't"} say whether ${noWorld.length === 1 ? 'it reaches' : 'they reach'} outside services like the web (openWorldHint): ${list(noWorld)}` });
