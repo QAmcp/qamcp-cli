@@ -11,6 +11,7 @@ import { HIDDEN_INSTRUCTION_PATTERNS, INTERNAL_PATTERNS, SECRET_PATTERNS, VALID_
 import { decideRun, labelContradiction, looksDestructive } from './toolSafety.js';
 import { hollowTools, similarTools, vagueDescription } from './heuristics.js';
 import { scoreOf } from './score.js';
+import { BEST_PRACTICES_ID, bestPracticesCheck } from './bestPractices.js';
 import type { CheckResult, Finding, ProgressEvent, Report, Status, TestOptions, ToolCallRecord } from './types.js';
 
 const MAX_TOOLS_TO_RUN = 60;
@@ -135,6 +136,7 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
     push(descriptionCheck(tools));
     push(safetyLabelCheck(tools));
     push(hiddenInstructionCheck(tools));
+    push(bestPracticesCheck(tools));
 
     // 3. Call tools that are safe to run
     const runnable: { tool: Tool; why: ToolCallRecord['why'] }[] = [];
@@ -220,12 +222,13 @@ function finish(report: Report): Report {
   report.scoreBeforeCaps = s.beforeCaps;
   report.scoreCaps = s.caps;
   report.coverage = {
-    checksRun: report.checks.filter((c) => c.status !== 'skip').length,
+    // "Best practices" are tips, not scored yet, so they don't count as a check here either.
+    checksRun: report.checks.filter((c) => c.status !== 'skip' && c.id !== BEST_PRACTICES_ID).length,
     // The login-setup check only exists when the server asks for a login.
     // Some checks only exist for some servers (login, resources and prompts, plug-ins).
     // Without a tools feature the tool checks don't apply, so they aren't counted as untested.
     // "Tools work together" only counts when the server has chains to test.
-    checksTotal: report.offersTools === false ? report.checks.filter((c) => c.id !== 'tools').length : CHECKS_TOTAL + report.checks.filter((c) => !CORE_CHECKS.has(c.id) && !(c.id === 'chains' && c.status === 'skip')).length,
+    checksTotal: report.offersTools === false ? report.checks.filter((c) => c.id !== 'tools' && c.id !== BEST_PRACTICES_ID).length : CHECKS_TOTAL + report.checks.filter((c) => !CORE_CHECKS.has(c.id) && c.id !== BEST_PRACTICES_ID && !(c.id === 'chains' && c.status === 'skip')).length,
     toolsRun: new Set(report.calls.filter((c) => !NOT_TESTED.has(c.outcome)).map((c) => c.tool)).size,
     toolsTotal: report.toolCount,
   };

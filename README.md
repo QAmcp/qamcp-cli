@@ -109,6 +109,7 @@ Privacy: nothing was sent anywhere except to the server being tested (and its lo
 | **Login setup follows the spec** | Only when a server needs a login: the OAuth details AI apps need to log in |
 | **Resources and prompts work** | Only when a server has them: each opens, content matches its type, inputs are used |
 | **Tools work together** | Only when tools chain: one tool's answer (like an ID) is passed to the next tool, which must be able to use it |
+| **Follows MCP best practices** (tips, not scored yet) | From Anthropic's guide for building MCP servers: very common tool names that clash with other servers, mixed naming styles, the `idempotentHint` and `openWorldHint` labels, and a tool list so big it fills the AI's memory |
 
 ## How to read the score
 

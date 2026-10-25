@@ -246,7 +246,8 @@ function statusWord(s: Status): string {
 function verdictOf(r: Report): { word: string; cls: string } {
   if (r.notScored) return { word: 'NOT SCORED', cls: 'skip' };
   if (r.checks.some((c) => c.status === 'fail')) return { word: 'FAIL', cls: 'fail' };
-  if (r.checks.some((c) => c.status === 'warn')) return { word: 'PASS · WITH NOTES', cls: 'pass' };
+  // Tips worth no points (best practices) never change the stamp.
+  if (r.checks.some((c) => c.status === 'warn' && c.weight > 0)) return { word: 'PASS · WITH NOTES', cls: 'pass' };
   return { word: 'PASS', cls: 'pass' };
 }
 

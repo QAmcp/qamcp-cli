@@ -74,7 +74,7 @@ export function formatReport(r: Report): string {
 export function topFixes(r: Report, max = 3): Finding[] {
   const rank = { fail: 0, warn: 1 } as const;
   return r.checks
-    .filter((c) => c.status === 'fail' || c.status === 'warn')
+    .filter((c) => (c.status === 'fail' || c.status === 'warn') && c.weight > 0)
     .sort((a, b) => rank[a.status as 'fail' | 'warn'] - rank[b.status as 'fail' | 'warn'] || b.weight - a.weight)
     .map((c) => c.findings.find((f) => f.status === c.status)!)
     .filter(Boolean)

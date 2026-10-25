@@ -33,7 +33,8 @@ export function compareReports(current: Report, baseline: Report): Comparison {
   const better: Comparison['better'] = [];
   for (const c of current.checks) {
     const b = before.get(c.id);
-    if (!b || c.status === 'skip' || b.status === 'skip') continue;
+    // Checks worth no points (tips) never make a run "worse".
+    if (!b || c.status === 'skip' || b.status === 'skip' || !c.weight) continue;
     const row = { id: c.id, title: c.title, from: b.status, to: c.status };
     if (RANK[c.status] > RANK[b.status]) worse.push(row);
     else if (RANK[c.status] < RANK[b.status]) better.push(row);
