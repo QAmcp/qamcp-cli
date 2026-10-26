@@ -8,7 +8,7 @@
 
 Every result is a hard fact (pass or fail, milliseconds, exact matches). No AI judges anything, and nothing is sent anywhere except to the server you test.
 
-**Website:** [qamcp.github.io](https://qamcp.github.io): how it works, sample reports, and running it on every change.
+**Website:** [qamcp.dev](https://qamcp.dev): how it works, sample reports, and running it on every change.
 
 ## Install and first run
 
@@ -61,7 +61,7 @@ Before you install qamcp-demo-broken-server
    • 5 tools only read (labeled read-only).
 ```
 
-It calls none of the server's tools: it reads what the server says about itself, and tells you about hidden instructions and which tools could change, send or delete things. It can't see what a server does with your data behind the scenes, so only add servers from makers you trust. You can also look the server up in the [directory](https://qamcp.github.io/directory.html).
+It calls none of the server's tools: it reads what the server says about itself, and tells you about hidden instructions and which tools could change, send or delete things. It can't see what a server does with your data behind the scenes, so only add servers from makers you trust. You can also look the server up in the [directory](https://qamcp.dev/directory.html).
 
 ## A sample report
 
