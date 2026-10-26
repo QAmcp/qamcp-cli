@@ -40,6 +40,15 @@ test('best practices: a huge tool list is called out with its size', () => {
   assert.match(c.findings[0].message, /The tool list is about \d+ KB \(roughly \d+k tokens\)/);
 });
 
+test('best practices: structured answers with no declared shape are named', () => {
+  const tools = [tool('acme_get_order', allLabels), { ...tool('acme_get_user', allLabels), outputSchema: { type: 'object' } } as Tool, tool('acme_hello', allLabels)];
+  const call = (t: string, text: string) => ({ tool: t, why: 'labeled read-only', kind: 'good-input', arguments: {}, ms: 5, outcome: 'ok', text }) as any;
+  const c = bestPracticesCheck(tools, [call('acme_get_order', '{"id":1,"total":9}'), call('acme_get_user', '{"id":2}'), call('acme_hello', 'Hello there')]);
+  const text = c.findings.map((f) => f.message).join('\n');
+  assert.match(text, /1 tool answers with structured data but doesn't declare its shape \(outputSchema\): acme_get_order\./);
+  assert.doesNotMatch(text, /acme_get_user|acme_hello/);
+});
+
 test('best practices: a tidy server passes', () => {
   const c = bestPracticesCheck([tool('acme_get_order', allLabels), tool('acme_cancel_order', { destructiveHint: true, idempotentHint: true, openWorldHint: false })]);
   assert.equal(c.status, 'pass');

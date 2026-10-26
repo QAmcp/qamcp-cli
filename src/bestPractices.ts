@@ -2,7 +2,18 @@
 // hard facts. Not scored yet (weight 0), so it never changes a server's score or fails a CI gate.
 
 import type { Tool } from '@modelcontextprotocol/client';
-import type { CheckResult, Finding } from './types.js';
+import type { CheckResult, Finding, ToolCallRecord } from './types.js';
+
+// An answer that is a JSON object or list, i.e. data a program could depend on.
+const isJsonData = (text: string) => {
+  const t = text.trim();
+  if (!/^[[{]/.test(t)) return false;
+  try {
+    return typeof JSON.parse(t) === 'object';
+  } catch {
+    return false;
+  }
+};
 
 export const BEST_PRACTICES_ID = 'practices';
 export const BEST_PRACTICES_TITLE = 'Follows MCP best practices (not scored yet)';
@@ -25,7 +36,7 @@ export function nameStyle(name: string): Style | undefined {
 const list = (names: string[], max = 6) => names.slice(0, max).join(', ') + (names.length > max ? ` and ${names.length - max} more` : '');
 const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 
-export function bestPracticesCheck(tools: Tool[]): CheckResult {
+export function bestPracticesCheck(tools: Tool[], calls: ToolCallRecord[] = []): CheckResult {
   const findings: Finding[] = [];
 
   // 1. Names
@@ -53,6 +64,13 @@ export function bestPracticesCheck(tools: Tool[]): CheckResult {
   const size = JSON.stringify(tools).length;
   if (size > BIG_TOOL_LIST)
     findings.push({ status: 'warn', message: `The tool list is about ${Math.round(size / 1000)} KB (roughly ${Math.round(size / 4000)}k tokens). AI apps send it with every message, so it takes that much of the AI's memory before any work starts.` });
+
+  // 4. Structured answers with no declared shape: if they change, nothing can notice (we check every
+  //    answer against an outputSchema when there is one).
+  const declared = new Set(tools.filter((t) => (t as any).outputSchema).map((t) => t.name));
+  const undeclared = [...new Set(calls.filter((c) => c.kind === 'good-input' && c.outcome === 'ok' && !declared.has(c.tool) && isJsonData(c.text)).map((c) => c.tool))];
+  if (undeclared.length)
+    findings.push({ status: 'warn', message: `${plural(undeclared.length, 'tool')} ${undeclared.length === 1 ? 'answers' : 'answer'} with structured data but ${undeclared.length === 1 ? "doesn't" : "don't"} declare its shape (outputSchema): ${list(undeclared)}. If those answers change shape, nothing can catch it; with a schema, every answer is checked.` });
 
   if (!findings.length) findings.push({ status: 'pass', message: 'Tool names, safety labels and tool list size follow the MCP guide' });
   const status = findings.some((f) => f.status === 'warn') ? 'warn' : 'pass';

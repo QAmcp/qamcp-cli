@@ -141,7 +141,6 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
     push(descriptionCheck(tools));
     push(safetyLabelCheck(tools));
     push(hiddenInstructionCheck(tools));
-    push(bestPracticesCheck(tools));
 
     // 3. Call tools that are safe to run
     const runnable: { tool: Tool; why: ToolCallRecord['why'] }[] = [];
@@ -201,6 +200,8 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
     push(speedCheck(connectMs, listMs, report.calls, report.protocol?.transport === 'stdio'));
     push(leakCheck(report.calls, !!opts.stdio));
     }
+    // After the calls, so it can also say which tools answer in structured data without declaring its shape.
+    push(bestPracticesCheck(tools, report.calls));
     }
     // Resources and prompts: only a check when the server offers them.
     say({ kind: 'working', message: 'Opening resources and prompts' });
