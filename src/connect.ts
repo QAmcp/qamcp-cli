@@ -1,4 +1,4 @@
-import { Client, SSEClientTransport, StreamableHTTPClientTransport, UnauthorizedError, type OAuthClientProvider } from '@modelcontextprotocol/client';
+import { Client, SdkError, SdkErrorCode, SSEClientTransport, StreamableHTTPClientTransport, UnauthorizedError, type OAuthClientProvider } from '@modelcontextprotocol/client';
 import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/client/stdio';
 import { FileOAuthProvider, waitForLoginRedirect } from './oauth.js';
 
@@ -37,25 +37,38 @@ export async function connect(url: string, headers: Record<string, string>, time
   if (authProvider) {
     const started = Date.now();
     const client = new Client(CLIENT_INFO, { versionNegotiation: { mode: 'auto' } });
-    await client.connect(new StreamableHTTPClientTransport(new URL(url), { requestInit, authProvider, fetch: fetchImpl }), { timeout: timeoutMs });
+    await withDeadline(client.connect(new StreamableHTTPClientTransport(new URL(url), { requestInit, authProvider, fetch: fetchImpl }), { timeout: timeoutMs }), timeoutMs, client);
     return { client, transport: 'streamable-http', ms: Date.now() - started, loggedIn: true };
   }
   const started = Date.now();
 
   try {
     const client = new Client(CLIENT_INFO, { versionNegotiation: { mode: 'auto' } });
-    await client.connect(new StreamableHTTPClientTransport(new URL(url), { requestInit, fetch: fetchImpl }), { timeout: timeoutMs });
+    await withDeadline(client.connect(new StreamableHTTPClientTransport(new URL(url), { requestInit, fetch: fetchImpl }), { timeout: timeoutMs }), timeoutMs, client);
     return { client, transport: 'streamable-http', ms: Date.now() - started };
   } catch (httpError) {
     try {
       const client = new Client(CLIENT_INFO);
-      await client.connect(new SSEClientTransport(new URL(url), { requestInit, fetch: fetchImpl }), { timeout: timeoutMs });
+      await withDeadline(client.connect(new SSEClientTransport(new URL(url), { requestInit, fetch: fetchImpl }), { timeout: timeoutMs }), timeoutMs, client);
       return { client, transport: 'sse', ms: Date.now() - started };
     } catch {
       // The SSE attempt is only a fallback; the first error is the one worth showing.
       throw httpError;
     }
   }
+}
+
+// The SDK's time limit covers each request, but not every wait while connecting: the old SSE
+// connection can wait forever for its first message. So each attempt also gets a hard deadline.
+function withDeadline<T>(attempt: Promise<T>, timeoutMs: number, client: Client): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      void client.close().catch(() => {});
+      reject(new SdkError(SdkErrorCode.RequestTimeout, `Connecting took longer than ${Math.round((timeoutMs + 5_000) / 1000)} s`));
+    }, timeoutMs + 5_000);
+  });
+  return Promise.race([attempt, late]).finally(() => clearTimeout(timer));
 }
 
 // Start the program and talk to it over its standard input and output.
