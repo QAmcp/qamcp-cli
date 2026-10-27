@@ -2,6 +2,7 @@
 // hard facts. Not scored yet (weight 0), so it never changes a server's score or fails a CI gate.
 
 import type { Tool } from '@modelcontextprotocol/client';
+import { nameWords, riskyInput } from './toolSafety.js';
 import type { CheckResult, Finding, ToolCallRecord } from './types.js';
 
 // An answer that is a JSON object or list, i.e. data a program could depend on.
@@ -31,6 +32,23 @@ export function nameStyle(name: string): Style | undefined {
   if (/^[a-z][a-z0-9]*(-[a-z0-9]+)+$/.test(name)) return 'kebab-case';
   if (/^[a-z][a-z0-9]*(\.[a-z0-9]+)+$/.test(name)) return 'dot.case';
   return undefined; // one word, or a mix: no style to compare
+}
+
+// File paths and filters that accept any text. A plain "path" is often a web address ("/blog/post"),
+// so it only counts when the tool talks about files or folders.
+const FILE_INPUTS = new Set(['file', 'file_path', 'filepath', 'filename', 'file_name', 'dir', 'directory', 'folder']);
+const FILTER_INPUTS = new Set(['filter', 'filters', 'where', 'condition', 'conditions']);
+const FILE_WORDS = /\b(?:files?|folders?|director(?:y|ies)|filesystem)\b/i;
+export function openEndedInput(tool: Tool): { name: string; kind: 'file path' | 'filter' } | undefined {
+  const props: Record<string, any> = (tool.inputSchema as any)?.properties ?? {};
+  const aboutFiles = FILE_WORDS.test(`${nameWords(tool.name).join(' ')} ${tool.description ?? ''}`);
+  for (const [name, s] of Object.entries(props)) {
+    if (s?.type !== 'string' || s.pattern || s.maxLength || s.enum || s.format) continue;
+    const n = nameWords(name).join('_');
+    if (FILE_INPUTS.has(n) || (n === 'path' && aboutFiles)) return { name, kind: 'file path' };
+    if (FILTER_INPUTS.has(n)) return { name, kind: 'filter' };
+  }
+  return undefined;
 }
 
 const list = (names: string[], max = 6) => names.slice(0, max).join(', ') + (names.length > max ? ` and ${names.length - max} more` : '');
@@ -71,6 +89,22 @@ export function bestPracticesCheck(tools: Tool[], calls: ToolCallRecord[] = []):
   const undeclared = [...new Set(calls.filter((c) => c.kind === 'good-input' && c.outcome === 'ok' && !declared.has(c.tool) && isJsonData(c.text)).map((c) => c.tool))];
   if (undeclared.length)
     findings.push({ status: 'warn', message: `${plural(undeclared.length, 'tool')} ${undeclared.length === 1 ? 'answers' : 'answer'} with structured data but ${undeclared.length === 1 ? "doesn't" : "don't"} declare its shape (outputSchema): ${list(undeclared)}. If those answers change shape, nothing can catch it; with a schema, every answer is checked.` });
+
+  // 5. Read-only labels on tools that run whatever they're given: the label is only as good as the input.
+  for (const t of tools) {
+    if (t.annotations?.readOnlyHint !== true) continue;
+    const risky = riskyInput(t);
+    if (risky)
+      findings.push({ status: 'warn', tool: t.name, message: `Labeled read-only, but it ${risky}. A read-only label can't promise much when the tool runs whatever it's sent; make the tool itself refuse changes (for example with a read-only database user), or drop the label. QAmcp doesn't run it in safe mode.` });
+  }
+
+  // 6. Read-only tools with a file path or filter that has no limit: they can reach further than meant.
+  for (const t of tools) {
+    if (t.annotations?.readOnlyHint !== true) continue;
+    const open = openEndedInput(t);
+    if (open)
+      findings.push({ status: 'warn', tool: t.name, message: `Labeled read-only, but its "${open.name}" input is a ${open.kind} with no pattern, length limit or fixed choices. Make sure it can't reach outside what it's meant for (${open.kind === 'file path' ? 'like ../ to leave its folder' : 'like a filter that matches everything'}), and add a pattern so AI apps know what fits.` });
+  }
 
   if (!findings.length) findings.push({ status: 'pass', message: 'Tool names, safety labels and tool list size follow the MCP guide' });
   const status = findings.some((f) => f.status === 'warn') ? 'warn' : 'pass';

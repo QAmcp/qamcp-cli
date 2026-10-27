@@ -75,6 +75,26 @@ export function writeSignal(tool: Tool, strict = false): string | undefined {
   return undefined;
 }
 
+// Inputs that hand the tool a whole command or query, or ask it to delete. A read-only label can't
+// promise much then: what the tool does depends on what the AI sends. ("query" alone is a search box
+// in most servers, so it only counts when its description says it takes SQL or a raw command.)
+const RAW_INPUTS = new Set(['sql', 'sql_query', 'raw_query', 'raw_sql', 'statement', 'command', 'cmd', 'shell', 'script', 'cypher']);
+const DELETE_INPUTS = new Set(['force', 'cascade', 'purge', 'delete', 'hard_delete', 'permanent', 'overwrite', 'drop', 'wipe', 'truncate']);
+const RAW_DESCRIPTION = /\b(?:raw|arbitrary)\s+(?:sql|queries|query|commands?|statements?)\b|\bsql\s+(?:query|queries|statements?)\b|\bshell commands?\b/i;
+
+// Undefined if none; otherwise why, e.g. 'takes a raw "sql" input'.
+export function riskyInput(tool: Tool): string | undefined {
+  const props: Record<string, any> = (tool.inputSchema as any)?.properties ?? {};
+  for (const [name, schema] of Object.entries(props)) {
+    const n = nameWords(name).join('_');
+    if (RAW_INPUTS.has(n)) return `takes a raw "${name}" input`;
+    if (DELETE_INPUTS.has(n)) return `has a delete-style "${name}" input`;
+    const said = typeof schema?.description === 'string' ? schema.description.match(RAW_DESCRIPTION)?.[0] : undefined;
+    if (said) return `has a "${name}" input described as "${said}"`;
+  }
+  return undefined;
+}
+
 // Strong enough evidence to SAY a read-only label is wrong (it goes in reports and in
 // messages to the owner): the name starts with a write verb AND the description or the
 // inputs also say it changes something. One signal alone only means we don't run the tool.
@@ -113,11 +133,13 @@ export function decideRun(tool: Tool, mode: SafetyMode): RunDecision {
     // Labels are only hints from the server. If the tool clearly says it writes, believe that.
     const contradiction = writeSignal(tool, true);
     if (contradiction) return { run: false, why: `labeled read-only, but its ${contradiction}, which usually means it changes something. Skipped to be safe: if it only reads, a clearer ${contradiction.startsWith('name') ? 'name' : 'description'} helps AI apps too, or test again with --owner` };
+    const risky = mode === 'labeled' ? riskyInput(tool) : undefined;
+    if (risky) return { run: false, why: `labeled read-only, but it ${risky}, so what it does depends on what it's sent. Skipped to be safe: if you own this server, test again with --owner` };
     return { run: true, why: 'labeled read-only' };
   }
   if (mode === 'labeled') return { run: false, why: 'no safety label (if you own this server, test again in owner mode)' };
   // Guessing without a label: read the whole description, stay cautious.
-  const signal = writeSignal(tool);
+  const signal = writeSignal(tool) ?? riskyInput(tool);
   if (signal) return { run: false, why: `${signal}, so it might change data` };
   if (!nameWords(tool.name).some((w) => READ_WORDS.has(w))) return { run: false, why: "no label, and the name doesn't say it only reads" };
   return { run: true, why: 'name says read-only' };

@@ -84,3 +84,25 @@ test('a read-only tool skipped only for its name says why and what to do', () =>
   assert.equal(d.run, false);
   assert.match(d.why, /labeled read-only, but its name starts with "add", which usually means it changes something\. Skipped to be safe: if it only reads, a clearer name helps AI apps too, or test again with --owner/);
 });
+
+test('read-only tools that run whatever they are sent are skipped in safe mode', () => {
+  const ro = { readOnlyHint: true };
+  for (const input of ['sql', 'command', 'rawQuery', 'force', 'cascade', 'hard_delete']) {
+    const d = decideRun(tool('db_lookup', 'Looks things up.', ro, [input]), 'labeled');
+    assert.equal(d.run, false, input);
+    assert.match(d.why, new RegExp(`"${input}" input`), input);
+  }
+  const described = { name: 'report_view', description: 'Shows a report.', annotations: ro, inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'The SQL query to run' } } } } as any;
+  assert.match((decideRun(described, 'labeled') as any).why, /described as "SQL query"/);
+});
+
+test('an ordinary search query is not a raw query', () => {
+  const ro = { readOnlyHint: true };
+  assert.equal(decideRun(tool('search_docs', 'Searches the docs.', ro, ['query', 'limit', 'force_refresh_cache']), 'labeled').run, true);
+  const search = { name: 'search_docs', description: 'Searches.', annotations: ro, inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'Any query, in plain words' } } } } as any;
+  assert.equal(decideRun(search, 'labeled').run, true);
+});
+
+test('the owner can still run a labeled read-only tool with a raw input', () => {
+  assert.equal(decideRun(tool('db_lookup', 'Looks things up.', { readOnlyHint: true }, ['sql']), 'owner').run, true);
+});
