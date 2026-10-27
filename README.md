@@ -109,7 +109,8 @@ Privacy: nothing was sent anywhere except to the server being tested (and its lo
 | **Login setup follows the spec** | Only when a server needs a login: the OAuth details AI apps need to log in |
 | **Resources and prompts work** | Only when a server has them: each opens, content matches its type, inputs are used |
 | **Tools work together** | Only when tools chain: one tool's answer (like an ID) is passed to the next tool, which must be able to use it |
-| **Follows MCP best practices** (tips, not scored yet) | From Anthropic's guide for building MCP servers: very common tool names that clash with other servers, mixed naming styles, the `idempotentHint` and `openWorldHint` labels, and a tool list so big it fills the AI's memory |
+| **Follows MCP best practices** (tips, not scored yet) | From Anthropic's guide for building MCP servers: very common tool names that clash with other servers, mixed naming styles, the `idempotentHint` and `openWorldHint` labels, a tool list so big it fills the AI's memory, and tools that answer with structured data but don't declare its shape (`outputSchema`) |
+| **Blocks requests from other websites** (not scored yet) | Only for servers on your computer: sends the same harmless hello twice, once as a normal app and once as a strange website, to see if the server checks the `Origin` header as the MCP spec requires. Without that, any website open in your browser could send commands to it. No tools are called |
 
 ## How to read the score
 
