@@ -254,7 +254,8 @@ function protocolCheck(report: Report, stdoutJunk: string[] = []): CheckResult {
   const findings: Finding[] = [];
   // Be open about it: checking stdout means starting the program a second time, briefly.
   if (report.protocol?.transport === 'stdio')
-    findings.push({ status: stdoutJunk.length ? 'warn' : 'pass', message: stdoutJunk.length ? 'Checked what the program prints by starting it once more for a moment' : 'Prints only MCP messages on stdout (checked by starting the program once more for a moment)' });
+    // The second start is only a note; the stray lines themselves are the warning below.
+    findings.push({ status: 'pass', message: stdoutJunk.length ? 'Checked what the program prints by starting it once more for a moment' : 'Prints only MCP messages on stdout (checked by starting the program once more for a moment)' });
   if (stdoutJunk.length)
     findings.push({ status: 'warn', message: `The program prints text that isn't an MCP message where only MCP messages may go (stdout): "${stdoutJunk[0]}". Some AI apps fail to connect because of it. Print logs to stderr instead.` });
   const { era, version, transport } = report.protocol!;
