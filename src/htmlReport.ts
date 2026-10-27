@@ -331,7 +331,7 @@ const SYMBOLS = `<svg width="0" height="0" style="position:absolute" aria-hidden
 </defs></svg>`;
 
 const CSS = `
-:root{--ground:#1A1A1A;--sheet:#232323;--raise:#2A2726;--ink:#EDE7E3;--soft:#ABA49F;--faint:#938B86;--rule:#38332F;--rose:#B9838A;--fail:#EC5F57;--pass:#93BB9B;--off:#7C7570;
+:root{--ground:#1A1A1A;--sheet:#232323;--raise:#2A2726;--ink:#EDE7E3;--soft:#ABA49F;--faint:#938B86;--rule:#38332F;--rose:#B9838A;--fail:#EC5F57;--pass:#D9D0C7;--off:#7C7570;
 --label:600 12px/1 "Archivo Narrow","Arial Narrow",sans-serif;--mono:"JetBrains Mono",ui-monospace,Consolas,monospace}
 *{box-sizing:border-box;margin:0}
 html{background:var(--ground);color-scheme:dark;scrollbar-color:#4A4440 var(--ground)}
