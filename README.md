@@ -6,7 +6,7 @@
 
 **QAmcp tests MCP servers for the people who build them: it connects like an AI app does and tells you, in plain words, what's broken.**
 
-Every result is a hard fact (pass or fail, milliseconds, exact matches). No AI judges anything, and nothing is sent anywhere except to the server you test.
+Every result is checked by code and shows its evidence (pass or fail, milliseconds, exact matches, or the word that set it off). No AI judges anything, and nothing is sent anywhere except to the server you test.
 
 **Website:** [qamcp.dev](https://qamcp.dev): how it works, sample reports, and running it on every change.
 
