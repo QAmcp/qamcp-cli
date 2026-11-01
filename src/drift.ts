@@ -55,6 +55,27 @@ function lines(t: ToolDef): string[] {
   return out;
 }
 
+const sentences = (text: string | undefined) => (text ?? '').split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+const wordSet = (s: string) => new Set(s.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? []);
+const short = (s: string) => (s.length > 180 ? `${s.slice(0, 180).trimEnd()}…` : s);
+
+// Sentences that are really new. We can't always tell if a sentence is harmful, but we can always tell
+// it wasn't there before, so a person gets to read it. A sentence that shares most of its words with
+// one that went away is the same sentence reworded (a typo fix isn't news).
+export function newSentences(before: string | undefined, after: string | undefined): string[] {
+  const was = sentences(before);
+  const gone = was.filter((s) => !sentences(after).includes(s));
+  return sentences(after).filter((s) => {
+    if (was.includes(s)) return false;
+    const w = wordSet(s);
+    return !gone.some((g) => {
+      const o = wordSet(g);
+      const same = [...w].filter((x) => o.has(x)).length;
+      return same / Math.max(w.size, o.size, 1) >= 0.6;
+    });
+  });
+}
+
 // A small line diff (longest common subsequence): enough for one tool's lines.
 export function lineDiff(a: string[], b: string[]): string {
   const n = a.length, m = b.length;
@@ -91,7 +112,11 @@ function compareTool(before: ToolDef, after: ToolDef): ToolChange | undefined {
     if (!ra.has(k) && rb.has(k)) important.push(`"${k}" is no longer required`);
     if (typeOf(pa[k]) !== typeOf(pb[k])) important.push(`"${k}" changed type`);
     else if (JSON.stringify({ ...pa[k], description: 0 }) !== JSON.stringify({ ...pb[k], description: 0 })) important.push(`"${k}" accepts different values`);
-    if (pa[k].description !== pb[k].description) minor.push(`"${k}" description reworded`);
+    if (pa[k].description !== pb[k].description) {
+      const fresh = newSentences(String(pb[k].description ?? ''), String(pa[k].description ?? ''));
+      for (const s of fresh) important.push(`new sentence on input "${k}": "${short(s)}"`);
+      if (!fresh.length) minor.push(`"${k}" description reworded`);
+    }
   }
   for (const k of new Set([...Object.keys(before.annotations ?? {}), ...Object.keys(after.annotations ?? {})])) {
     const x = (before.annotations ?? {})[k], y = (after.annotations ?? {})[k];
@@ -100,8 +125,10 @@ function compareTool(before: ToolDef, after: ToolDef): ToolChange | undefined {
   if ((before.description ?? '') !== (after.description ?? '')) {
     const was = words(before.description);
     const now = [...words(after.description)].filter((w) => !was.has(w));
+    const fresh = newSentences(before.description, after.description);
     if (now.length) important.push(`description now says it ${now.map((w) => `"${w}"`).join(', ')}`);
-    else minor.push('description reworded');
+    for (const s of fresh) important.push(`new sentence in the description: "${short(s)}"`);
+    if (!now.length && !fresh.length) minor.push('description reworded');
   }
   return { tool: after.name, important: important.length > 0, what: [...important, ...minor], diff };
 }
@@ -110,7 +137,7 @@ export function diffTools(before: ToolDef[], after: ToolDef[]): ToolChange[] {
   const b = new Map(before.map((t) => [t.name, t]));
   const a = new Map(after.map((t) => [t.name, t]));
   const out: ToolChange[] = [];
-  for (const t of after) if (!b.has(t.name)) out.push({ tool: t.name, important: true, what: ['new tool'], diff: lines(t).map((l) => `+ ${l}`).join('\n') });
+  for (const t of after) if (!b.has(t.name)) out.push({ tool: t.name, important: true, what: ['new tool', ...(t.description?.trim() ? [`it says: "${short(t.description.replace(/\s+/g, ' ').trim())}"`] : [])], diff: lines(t).map((l) => `+ ${l}`).join('\n') });
   for (const t of before) if (!a.has(t.name)) out.push({ tool: t.name, important: true, what: ['tool removed: AI apps that use it will break'], diff: lines(t).map((l) => `- ${l}`).join('\n') });
   for (const t of after) {
     const old = b.get(t.name);

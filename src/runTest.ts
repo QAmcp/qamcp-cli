@@ -7,8 +7,8 @@ import { checkResourcesAndPrompts } from './resourcesPrompts.js';
 import { badReplyWords, classifyError, schemaIssueWords } from './errorKind.js';
 import { checkLoginSetup } from './oauthSetup.js';
 import { badArgs, goodArgs } from './sampleArgs.js';
-import { HIDDEN_INSTRUCTION_PATTERNS, INTERNAL_PATTERNS, SECRET_PATTERNS, VALID_TOOL_NAME, allMatches, firstMatch } from './patterns.js';
-import { decideRun, labelContradiction, looksDestructive } from './toolSafety.js';
+import { HIDDEN_INSTRUCTION_PATTERNS, INTERNAL_PATTERNS, SECRET_PATTERNS, VALID_TOOL_NAME, allMatches, firstMatch, quoteOf, realSecret, HIDDEN_WEAK_PATTERNS } from './patterns.js';
+import { decideRun, deleteClaim, deleteSignal, labelContradiction, soundsDestructive } from './toolSafety.js';
 import { hollowTools, similarTools, vagueDescription } from './heuristics.js';
 import { scoreOf } from './score.js';
 import { bestPracticesCheck } from './bestPractices.js';
@@ -388,9 +388,15 @@ function safetyLabelCheck(tools: Tool[]): CheckResult {
     const signal = labelContradiction(t);
     // Word matching can't tell "shows a form whose button creates an order" from "creates an order",
     // so this is a prompt to double-check, never a failure.
-    if (signal && !looksDestructive(t.name)) findings.push({ status: 'warn', tool: t.name, message: `Labeled read-only, but its ${signal}. Worth double-checking the label, since AI apps trust it.` });
-    if (!looksDestructive(t.name)) continue;
-    if (t.annotations?.readOnlyHint === true) findings.push({ status: 'fail', tool: t.name, message: 'Name sounds like it deletes something, but it is labeled read-only' });
+    if (signal && !soundsDestructive(t)) findings.push({ status: 'warn', tool: t.name, message: `Labeled read-only, but its ${signal}. Worth double-checking the label, since AI apps trust it.` });
+    if (!soundsDestructive(t)) {
+      const said = t.annotations?.destructiveHint === true ? undefined : deleteClaim(t);
+      if (said) findings.push({ status: 'warn', tool: t.name, message: `Its description says "${said}", but it is not labeled dangerous. Worth double-checking the label, since AI apps trust it.` });
+      continue;
+    }
+    if (t.annotations?.readOnlyHint === true) findings.push(deleteSignal(t) === 'strong'
+      ? { status: 'fail', tool: t.name, message: 'Name sounds like it deletes something, but it is labeled read-only' }
+      : { status: 'warn', tool: t.name, message: 'Name might mean it deletes something, but it is labeled read-only. Worth double-checking the label.' });
     else if (t.annotations?.destructiveHint !== true) findings.push({ status: 'warn', tool: t.name, message: 'Name sounds like it deletes something, but it is not labeled dangerous' });
   }
   if (!findings.length) findings.push({ status: 'pass', message: 'Every tool has a safety label' });
@@ -402,10 +408,14 @@ function hiddenInstructionCheck(tools: Tool[]): CheckResult {
   for (const t of tools) {
     const text = [t.name, t.title, t.description, JSON.stringify(t.inputSchema)].filter(Boolean).join('\n');
     const hit = firstMatch(text, HIDDEN_INSTRUCTION_PATTERNS);
-    if (hit) findings.push({ status: 'fail', tool: t.name, message: `Description contains ${hit}. This is a known trick to make AI do things the user didn't ask for.` });
+    if (hit) findings.push({ status: 'fail', tool: t.name, message: `Description contains ${hit}: "${quoteOf(text, HIDDEN_INSTRUCTION_PATTERNS)}". This is a known trick to make AI do things the user didn't ask for.` });
+    // Only what people wrote for the AI to read: raw schema text runs together and matches by accident.
+    const words = [t.title, t.description, ...Object.values(((t.inputSchema as any)?.properties ?? {}) as Record<string, any>).map((p) => p?.description)].filter((x) => typeof x === 'string').join('\n');
+    const soft = !hit && firstMatch(words, HIDDEN_WEAK_PATTERNS);
+    if (soft) findings.push({ status: 'warn', tool: t.name, message: `Worth reading: ${soft}: "${quoteOf(words, HIDDEN_WEAK_PATTERNS)}". It may be harmless. An AI reads this as an instruction.` });
   }
-  if (!findings.length) findings.push({ status: 'pass', message: 'No hidden instructions found in tool descriptions' });
-  return check('hidden', 'No hidden instructions', 10, findings);
+  if (!findings.length) findings.push({ status: 'pass', message: 'No known hidden instructions found in tool descriptions' });
+  return check('hidden', 'No known hidden instructions', 10, findings);
 }
 
 function toolsRespondCheck(calls: ToolCallRecord[], ran: number, skipped: Report['skippedTools']): CheckResult {
@@ -480,7 +490,13 @@ function speedCheck(connectMs: number, listMs: number, calls: ToolCallRecord[], 
 
 function leakCheck(calls: ToolCallRecord[], local = false): CheckResult {
   const findings: Finding[] = [];
-  // Only error answers are scanned: normal answers from docs servers often contain example keys on purpose.
+  // Normal answers can hold a real key too, but docs servers show example keys on purpose, so this only
+  // says "worth a look", and leaves out obvious placeholders.
+  for (const c of calls.filter((c) => c.outcome === 'ok')) {
+    const secret = realSecret(c.text ?? '');
+    if (secret) findings.push({ status: 'warn', tool: c.tool, message: `Answer shows what looks like ${/^[aeiou]/i.test(secret) ? 'an' : 'a'} ${secret}. If it's a real key, change it. If it's only an example, you can ignore this.` });
+  }
+  // Errors are held to more: nobody puts a key in an error message as an example.
   for (const c of calls.filter((c) => c.outcome !== 'ok')) {
     // Report everything one message gives away, not just the first thing found.
     const secret = firstMatch(c.text, SECRET_PATTERNS);
@@ -490,7 +506,7 @@ function leakCheck(calls: ToolCallRecord[], local = false): CheckResult {
     if (internal.length) findings.push({ status: 'warn', tool: c.tool, message: `Error message shows internal details: ${internal.join(', ')}` });
   }
   const errorAnswers = calls.filter((c) => c.outcome !== 'ok').length;
-  if (!errorAnswers) return check('leaks', 'No secrets leaked', 5, [{ status: 'skip', message: 'No error messages to check' }], true);
+  if (!errorAnswers && !findings.length) return check('leaks', 'No secrets leaked', 5, [{ status: 'skip', message: 'No error messages to check' }], true);
   if (!findings.length) findings.push({ status: 'pass', message: `Checked ${errorAnswers} error messages: no secrets or internal details` });
   return check('leaks', 'No secrets leaked', 5, findings);
 }

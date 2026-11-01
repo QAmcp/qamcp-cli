@@ -1,7 +1,7 @@
 // --before-install: a plain-words safety look for someone about to add a server to their AI app.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { beforeInstall, formatBeforeInstall } from '../src/beforeInstall.js';
+import { beforeInstall, formatBeforeInstall, DIRECTORY_LINE, showDirectoryLine } from '../src/beforeInstall.js';
 import { parseArgs } from '../src/cliArgs.js';
 import type { CheckResult, Report } from '../src/types.js';
 
@@ -45,4 +45,24 @@ test('before install: all read-only is "no red flags"; a login wall is said plai
 test('before install: the option calls no tools and can\'t be mixed with running more tools', () => {
   assert.equal(parseArgs(['https://x.ai/mcp', '--before-install']).safety, 'none');
   assert.throws(() => parseArgs(['https://x.ai/mcp', '--before-install', '--owner']), /calls no tools/);
+});
+
+test('directory line: only for a person using --before-install, never with --json', () => {
+  assert.equal(DIRECTORY_LINE, 'See more tested servers: https://qamcp.dev/directory.html?from=cli');
+  assert.equal(showDirectoryLine({ beforeInstall: true, forPerson: true }), true);
+  assert.equal(showDirectoryLine({ beforeInstall: false, forPerson: true }), false, 'not in a normal run');
+  assert.equal(showDirectoryLine({ beforeInstall: true, json: 'r.json', forPerson: true }), false, 'not with --json');
+  assert.equal(showDirectoryLine({ beforeInstall: true, forPerson: false }), false, 'not when a program reads the output');
+});
+
+test('directory line: no network call, and the file that holds it has nothing that could make one', async () => {
+  const real = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (async () => { calls++; return new Response(''); }) as typeof fetch;
+  showDirectoryLine({ beforeInstall: true, forPerson: true });
+  globalThis.fetch = real;
+  assert.equal(calls, 0);
+  const { readFileSync } = await import('node:fs');
+  const source = readFileSync(new URL('../src/beforeInstall.ts', import.meta.url), 'utf8');
+  assert.ok(!/\bfetch\s*\(|node:https?|node:net|XMLHttpRequest/.test(source));
 });

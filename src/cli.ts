@@ -9,7 +9,7 @@ import { formatReport } from './report.js';
 import { runTest } from './runTest.js';
 import { startDemoServer } from './demoServer.js';
 import { installHook } from './hook.js';
-import { beforeInstall, formatBeforeInstall } from './beforeInstall.js';
+import { beforeInstall, DIRECTORY_LINE, formatBeforeInstall, showDirectoryLine } from './beforeInstall.js';
 import { diffTools, formatChanges, lastTools, rememberTools } from './drift.js';
 
 // A date as the person running it sees it (their own time zone), e.g. 2026-10-24.
@@ -109,9 +109,11 @@ if (report.toolDefs) {
   }
 }
 console.log(args.beforeInstall ? formatBeforeInstall(report, beforeInstall(report)) : formatReport(report));
+const forPerson = !!process.stdout.isTTY && !process.env.CI && !process.env.GIT_INDEX_FILE;
+if (showDirectoryLine({ beforeInstall: args.beforeInstall, json: args.json, forPerson })) console.log(DIRECTORY_LINE);
 if (report.toolChanges) console.log(formatChanges(report.toolChanges.changes, report.toolChanges.since) + '\n');
 // One line, only for a person at a terminal: never in CI logs or a git hook's output.
-if (process.stdout.isTTY && !process.env.CI && !process.env.GIT_INDEX_FILE) console.log('⭐ Found this useful? A star helps others find QAmcp: https://github.com/QAmcp/qamcp-cli\n');
+if (forPerson) console.log('⭐ Found this useful? A star helps others find QAmcp: https://github.com/QAmcp/qamcp-cli\n');
 
 // Compare, decide, and write the outputs CI wants.
 const comparison = baseline ? compareReports(report, baseline) : undefined;

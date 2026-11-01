@@ -48,6 +48,10 @@ export function beforeInstall(r: Report): InstallVerdict {
   return { level: 'ok', headline: 'No red flags found', points };
 }
 
+// Only a line of text: nothing is looked up, so nothing leaves this computer.
+export const DIRECTORY_LINE = 'See more tested servers: https://qamcp.dev/directory.html?from=cli';
+export const showDirectoryLine = (o: { beforeInstall?: boolean; json?: string; forPerson: boolean }) => !!o.beforeInstall && !o.json && o.forPerson;
+
 export function formatBeforeInstall(r: Report, v: InstallVerdict): string {
   const icon = { red: '🛑', careful: '⚠️ ', ok: '✅', unknown: '➖' }[v.level];
   return [

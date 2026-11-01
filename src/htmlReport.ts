@@ -149,7 +149,7 @@ const FULL_RUN: [string, string][] = [
   ['tools', 'Lists its tools'],
   ['descriptions', 'Every tool is described'],
   ['labels', 'Tools are labeled safe or dangerous'],
-  ['hidden', 'No hidden instructions'],
+  ['hidden', 'No known hidden instructions'],
   ['respond', 'Tools work with good inputs'],
   ['bad-input', 'Bad inputs give a clean error'],
   ['speed', 'Fast enough'],

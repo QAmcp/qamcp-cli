@@ -81,7 +81,7 @@ Privacy: nothing was sent anywhere except to the server being tested (and its lo
 ✅ Lists its tools — All good
 ✅ Every tool is described — All good
 ✅ Tools are labeled safe or dangerous — All good
-✅ No hidden instructions — All good
+✅ No known hidden instructions — All good
 ✅ Tools work with good inputs — All good
 ✅ Bad inputs give a clean error — All good
 ✅ Fast enough — All good
@@ -101,7 +101,7 @@ Privacy: nothing was sent anywhere except to the server being tested (and its lo
 | **Lists its tools** | Duplicate or invalid names, a broken tool that stops AI apps loading the server |
 | **Every tool is described** | Missing or vague descriptions, undescribed inputs, look-alike tools |
 | **Tools are labeled safe or dangerous** | Safety labels, and labels the tool itself contradicts |
-| **No hidden instructions** | Known tricks in descriptions: `<IMPORTANT>` blocks, "don't tell the user", invisible characters |
+| **No known hidden instructions** | Known tricks in descriptions: `<IMPORTANT>` blocks, "don't tell the user", invisible characters |
 | **Tools work with good inputs** | Runs safe tools; catches tools that hang or claim success but return nothing |
 | **Bad inputs give a clean error** | Missing and wrong-type inputs |
 | **Fast enough** | Connect, list and tool times |

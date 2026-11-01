@@ -63,7 +63,9 @@ export function similarTools(tools: Tool[], threshold = 0.6): SimilarPair[] {
       const shared = [...a].filter((w) => b.has(w)).length;
       const overlap = shared / (a.size + b.size - shared);
       if (overlap < threshold) continue;
-      if (mentionsTool(sets[i].desc, sets[j].name) || mentionsTool(sets[j].desc, sets[i].name)) continue;
+      // The same text twice can't point anywhere: each one just contains its own name.
+      const same = sets[i].desc.trim() === sets[j].desc.trim();
+      if (!same && (mentionsTool(sets[i].desc, sets[j].name) || mentionsTool(sets[j].desc, sets[i].name))) continue;
       // The words that are also in the tool names say the most, so they come first.
       const named = new Set([...nameWords(sets[i].name), ...nameWords(sets[j].name)].map((w) => contentWords(w)[0] ?? w));
       const first = (ws: string[]) => [...ws.filter((w) => named.has(w)), ...ws.filter((w) => !named.has(w))];

@@ -20,7 +20,7 @@ test('drift: a real server changed between two tests: every change found, the ri
   assert.ok(a.toolDefs?.length && b.toolDefs?.length, 'each test keeps the tools as the server described them');
   const changes = diffTools(a.toolDefs!, b.toolDefs!);
   const by = Object.fromEntries(changes.map((c) => [c.tool, c]));
-  assert.deepEqual(by.export_notes.what, ['new tool']);
+  assert.deepEqual(by.export_notes.what, ['new tool', 'it says: "Get the export notes details. Returns a short text answer."']);
   assert.match(by.get_stats.what[0], /tool removed/);
   const note = by.get_note.what.join(' | ');
   assert.match(note, /input renamed: "id" is now "note_id"/);

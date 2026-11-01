@@ -41,10 +41,23 @@ export const WRITE_VERB = /\b(?:creates|deletes|removes|modifies|overwrites|send
 // Words that mean "changes something for good", wherever they appear.
 const PERMANENT = /\b(?:permanently|irreversibl[ey]|cannot be undone)\b/i;
 
+// These are also things: "its recent fee transfers" says nothing about what the tool does. They only
+// count as actions at the start of a sentence, or right after a word like "and" or "it".
+const ALSO_NOUNS = new Set(['transfers', 'charges', 'uploads']);
+const isAction = (text: string, at: number) => {
+  const before = text.slice(0, at).trimEnd();
+  return !before || /[.!?:;]$/.test(before) || /\b(?:and|then|also|it|tool|that|which|this)$/i.test(before);
+};
+// The tool saying outright that it changes nothing, on top of its label.
+const SAYS_READ_ONLY = /\bread[- ]only\b|\bmoves nothing\b|\b(?:makes?|with) (?:zero|no) network calls\b|\bguidance only\b/i;
+
 // strict: only the first sentence counts (used before accusing a labeled tool of lying).
-function writePhraseIn(description: string, strict: boolean): string | undefined {
+function writePhraseIn(description: string, strict: boolean, saysReadOnly = false): string | undefined {
   const text = strict ? description.split(/(?<=[.!?])\s/)[0] : description;
-  return text.match(WRITE_VERB)?.[0] ?? description.match(PERMANENT)?.[0];
+  for (const m of text.matchAll(new RegExp(WRITE_VERB.source, 'gi'))) {
+    if (!ALSO_NOUNS.has(m[0].toLowerCase()) || isAction(text, m.index)) return m[0];
+  }
+  return saysReadOnly ? undefined : description.match(PERMANENT)?.[0];
 }
 
 // Splits snake_case, kebab-case, dot.case and camelCase names into lowercase words.
@@ -52,8 +65,45 @@ export function nameWords(name: string): string[] {
   return name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 }
 
+// "This does not delete anything by itself": it asks a person to confirm, and that's not a wrong label.
+const SAYS_NO_DELETE = /\b(?:does not|doesn'?t|will not|won'?t)\s+(?:delete|remove|destroy)\b|\b(?:changes|moves) nothing\b/i;
+
+// For deciding what to run, so it stays careful: any delete word in the name means we leave the tool alone.
 export function looksDestructive(toolName: string): boolean {
   return nameWords(toolName).some((w) => DESTRUCTIVE_WORDS.has(w));
+}
+
+// For telling an owner their label is wrong, so a word alone isn't enough: where it sits in the name decides.
+//   strong:  the name and the description agree it deletes
+//   unclear: only one of them says so ("delete_user" with nothing in its description, "db_truncate_table")
+//   none:    the word is a thing ("voltage_drop"), or the tool looks something up ("find_drop_off_points")
+const THING_TOO = new Set(['drop', 'reset', 'kill', 'clear']); // nouns as often as verbs at the end of a name
+const NOT_THE_DELETE = new Set(['status', 'policy', 'preview', 'reason', 'count', 'info', 'estimate', 'cost']); // about a delete, not one
+const drop = (w: string, next?: string) => w === 'drop' && (next === 'off' || next === 'shipping' || next === 'ship');
+export function deleteSignal(tool: Tool): 'strong' | 'unclear' | undefined {
+  const words = nameWords(tool.name);
+  const text = tool.description ?? '';
+  if (SAYS_NO_DELETE.test(text) || /^(?:undo|undelete|restore|recover)$/.test(words[0])) return undefined;
+  const hits = words.flatMap((w, i) => (DESTRUCTIVE_WORDS.has(w) && !drop(w, words[i + 1]) ? [i] : []));
+  if (!hits.length || NOT_THE_DELETE.has(words[words.length - 1])) return undefined;
+  const says = /\b(?:drops|deletes|removes|destroys|erases|wipes|purges|truncates|revokes|terminates)\b/i.test(text);
+  if (hits[0] === 0) return says || /\b(?:delet(?:e|ion|ing)|remov(?:e|al|ing)|drop|destroy|erase|wipe|purge|truncate|revoke|terminate|reset|kill)\b/i.test(text) ? 'strong' : 'unclear';
+  if (says) return 'strong';
+  // "find_and_remove_duplicates" does both, so a look-up word only clears the name when nothing joins them.
+  if (READ_WORDS.has(words[0])) return words.includes('and') || words.includes('then') ? 'unclear' : undefined;
+  const last = hits[hits.length - 1] === words.length - 1;
+  return last && hits.length === 1 && THING_TOO.has(words[words.length - 1]) ? undefined : 'unclear';
+}
+export const soundsDestructive = (tool: Tool) => !!deleteSignal(tool);
+
+// A description saying the tool itself deletes, for when the name doesn't ("cleanup_cache"). Only what opens
+// the description, or a plain "permanently": "lists items that were deleted" is about something else.
+const OPENS_DELETING = /^\s*(?:deletes|destroys|erases|wipes|purges|overwrites)\b|\b(?:then|and)\s+(?:deletes|destroys|erases|wipes)\b/i;
+const SAYS_PERMANENT = /\bpermanently\s+(?:deletes?|removes?|erases?|destroys?)\b|\bdeletion is permanent\b/i;
+export function deleteClaim(tool: Tool): string | undefined {
+  const d = tool.description ?? '';
+  if (SAYS_NO_DELETE.test(d)) return undefined;
+  return d.match(OPENS_DELETING)?.[0].trim() ?? d.match(SAYS_PERMANENT)?.[0];
 }
 
 // Input names that only make sense for a tool that sends or changes something.
@@ -67,11 +117,13 @@ export function writeSignal(tool: Tool, strict = false): string | undefined {
   const words = nameWords(tool.name);
   const writeWord = strict ? (WRITE_WORDS.has(words[0]) ? words[0] : undefined) : words.find((w) => WRITE_WORDS.has(w));
   if (writeWord) return strict ? `name starts with "${writeWord}"` : `name contains "${writeWord}"`;
-  const writePhrase = writePhraseIn(tool.description ?? '', strict);
+  // A label plus the tool's own "read-only; moves nothing" outweighs a weak hint, but never a plain "sends".
+  const saysReadOnly = strict && SAYS_READ_ONLY.test(tool.description ?? '');
+  const writePhrase = writePhraseIn(tool.description ?? '', strict, saysReadOnly);
   if (writePhrase) return `description says "${writePhrase}"`;
   const props = Object.keys((tool.inputSchema as any)?.properties ?? {});
   const writeInput = props.find((p) => WRITE_INPUTS.has(p.toLowerCase()));
-  if (writeInput) return `has a "${writeInput}" input`;
+  if (writeInput && !saysReadOnly) return `has a "${writeInput}" input`;
   return undefined;
 }
 
@@ -123,8 +175,8 @@ export function decideRun(tool: Tool, mode: SafetyMode): RunDecision {
   if (mode === 'none') return { run: false, why: 'look-only mode: no tools are called' };
   const a = tool.annotations;
   if (a?.destructiveHint === true) return { run: false, why: 'labeled dangerous' };
-  if (looksDestructive(tool.name)) return { run: false, why: 'name sounds like it deletes something' };
   if (a?.readOnlyHint === false) return { run: false, why: 'labeled as changing data' };
+  if (looksDestructive(tool.name)) return { run: false, why: 'name sounds like it deletes something' };
   // The spec says such a tool MUST be called as a task; a normal call is refused by design.
   if ((tool as any).execution?.taskSupport === 'required') return { run: false, why: 'can only run as a background task (task mode), which QAmcp does not test yet' };
   if (mode === 'all') return { run: true, why: a?.readOnlyHint === true ? 'labeled read-only' : 'owner allowed' };
