@@ -66,3 +66,13 @@ test('directory line: no network call, and the file that holds it has nothing th
   const source = readFileSync(new URL('../src/beforeInstall.ts', import.meta.url), 'utf8');
   assert.ok(!/\bfetch\s*\(|node:https?|node:net|XMLHttpRequest/.test(source));
 });
+
+test('before install: a calculator called voltage_drop is not a delete tool, delete_user still is', () => {
+  const r = { url: 'x', toolCount: 2, checks: [], calls: [], skippedTools: [], toolDefs: [
+    { name: 'voltage_drop', description: 'Voltage drop for a given wire size.', annotations: { readOnlyHint: true } },
+    { name: 'delete_user', description: 'Delete a user.', annotations: { readOnlyHint: false } },
+  ] } as unknown as Report;
+  const text = beforeInstall(r).points.join(' ');
+  assert.match(text, /1 tool can delete things: delete_user/);
+  assert.match(text, /1 tool only reads/);
+});

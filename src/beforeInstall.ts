@@ -2,7 +2,7 @@
 // It calls none of the server's tools (look-only), reads what the server says about itself, and
 // answers in plain words: any red flags, and which tools could change, send or delete things.
 
-import { looksDestructive, writeSignal } from './toolSafety.js';
+import { writeSignal, soundsDestructive } from './toolSafety.js';
 import type { Report } from './types.js';
 
 export interface InstallVerdict {
@@ -28,7 +28,7 @@ export function beforeInstall(r: Report): InstallVerdict {
   for (const t of r.toolDefs) {
     const a = (t.annotations ?? {}) as Record<string, unknown>;
     const tool = { name: t.name, description: t.description, inputSchema: t.inputSchema ?? {}, annotations: a } as any;
-    if (a.destructiveHint === true || looksDestructive(t.name)) deletes.push(t.name);
+    if (a.destructiveHint === true || soundsDestructive(tool)) deletes.push(t.name);
     else if (a.readOnlyHint === false || writeSignal(tool, true)) changes.push(t.name);
     else if (a.readOnlyHint === true) reads.push(t.name);
     else unsure.push(t.name);
