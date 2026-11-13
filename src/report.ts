@@ -1,3 +1,4 @@
+import { flagLines, reportFlags } from './flags.js';
 import type { Finding, Report, Status } from './types.js';
 
 const ICON: Record<Status, string> = { pass: '✅', warn: '⚠️ ', fail: '❌', skip: '➖' };
@@ -9,6 +10,9 @@ export function formatReport(r: Report): string {
   lines.push(`QAmcp report for ${r.url}`);
   if (r.server?.name) lines.push(`Server: ${r.server.name}${r.server.version ? ' v' + r.server.version : ''}`);
   if (r.protocol) lines.push(`MCP version: ${r.protocol.version ?? 'unknown'} (${r.protocol.transport})`);
+  lines.push('');
+  // Three plain answers first: one score hides what matters most.
+  lines.push(...flagLines(reportFlags(r)));
   lines.push('');
   const retry = r.notScored === 'needs a login' ? 'Test again with --login (or add a key with --header).' : 'Try again in a minute.';
   const partial = !r.notScored && r.coverage.checksRun < r.coverage.checksTotal;
