@@ -7,7 +7,7 @@ import { checkResourcesAndPrompts } from './resourcesPrompts.js';
 import { badReplyWords, classifyError, schemaIssueWords } from './errorKind.js';
 import { checkLoginSetup } from './oauthSetup.js';
 import { badArgs, goodArgs } from './sampleArgs.js';
-import { HIDDEN_INSTRUCTION_PATTERNS, INTERNAL_PATTERNS, SECRET_PATTERNS, VALID_TOOL_NAME, allMatches, firstMatch, quoteOf, realSecret, HIDDEN_WEAK_PATTERNS } from './patterns.js';
+import { HIDDEN_INSTRUCTION_PATTERNS, INTERNAL_PATTERNS, SECRET_PATTERNS, VALID_TOOL_NAME, allMatches, answerHits, answerText, firstMatch, quoteOf, realSecret, HIDDEN_WEAK_PATTERNS } from './patterns.js';
 import { decideRun, deleteClaim, deleteSignal, labelContradiction, soundsDestructive } from './toolSafety.js';
 import { hollowTools, similarTools, vagueDescription } from './heuristics.js';
 import { scoreOf } from './score.js';
@@ -199,6 +199,7 @@ export async function runTest(url: string, opts: TestOptions = {}): Promise<Repo
     );
     push(speedCheck(connectMs, listMs, report.calls, report.protocol?.transport === 'stdio'));
     push(leakCheck(report.calls, !!opts.stdio));
+    push(answerCheck(report.calls));
     }
     // After the calls, so it can also say which tools answer in structured data without declaring its shape.
     push(bestPracticesCheck(tools, report.calls));
@@ -509,6 +510,34 @@ function leakCheck(calls: ToolCallRecord[], local = false): CheckResult {
   if (!errorAnswers && !findings.length) return check('leaks', 'No secrets leaked', 5, [{ status: 'skip', message: 'No error messages to check' }], true);
   if (!findings.length) findings.push({ status: 'pass', message: `Checked ${errorAnswers} error messages: no secrets or internal details` });
   return check('leaks', 'No secrets leaked', 5, findings);
+}
+
+// What the tools we ran sent back reaches the AI just like a description does, so it gets the same
+// hidden-instruction scan. An answer can hold text the tool looked up (a web page, a document), so a
+// match is only ever "worth reading" with its exact words, and it is not scored yet.
+// (Keys in answers are already the leaks check's job.)
+export function answerCheck(calls: ToolCallRecord[]): CheckResult {
+  const title = 'No known hidden instructions in tool answers (not scored yet)';
+  const answered = calls.filter((c) => answerText(c.text ?? '').trim().length > 0);
+  if (!answered.length) return check('answers', title, 0, [{ status: 'skip', message: 'No tool answered, so there were no answers to read' }], true);
+  const findings: Finding[] = [];
+  const seen = new Set<string>();
+  for (const c of answered) {
+    for (const h of answerHits(c.text)) {
+      if (seen.has(`${c.tool}|${h.name}`)) continue;
+      seen.add(`${c.tool}|${h.name}`);
+      findings.push({
+        status: 'warn',
+        tool: c.tool,
+        message: h.strong
+          ? `An answer from ${c.tool} contains text aimed at the AI (${h.name}): "${h.quote}". It may be text the tool looked up rather than the server's own words, but an AI reads it as an instruction.`
+          : `Worth reading: an answer from ${c.tool} contains ${h.name}: "${h.quote}". It may be harmless. An AI reads tool answers too.`,
+      });
+    }
+  }
+  const tools = new Set(answered.map((c) => c.tool)).size;
+  if (!findings.length) findings.push({ status: 'pass', message: `Read ${answered.length} answers from ${tools} tool${tools === 1 ? '' : 's'}: none of the hidden-instruction wordings we know were found. New wordings can get past this check.` });
+  return check('answers', title, 0, findings);
 }
 
 // ---------- helpers ----------

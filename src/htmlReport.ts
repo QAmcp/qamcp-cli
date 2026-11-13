@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { topFixes } from './report.js';
+import { reportFlags, type Flag, type Flags } from './flags.js';
 import type { CheckResult, Finding, Report, Status } from './types.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -61,17 +62,18 @@ export function toHtml(r: Report, opts: HtmlOptions = {}): string {
 <main>
 <section class="cert" aria-labelledby="t">
   <div class="head"><h1 id="t">Test certificate: ${esc(name)}<span class="addr">${esc(r.url)}</span></h1></div>
-  <div class="fields">
-    ${fields.map(([k, v]) => `<div class="f"><div class="label">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join('\n    ')}
-  </div>
+  ${flagsHtml(reportFlags(r), (id) => items.find((x) => x.check.id === id)?.code)}
   <div class="result">
-    <div class="label">Result</div>
+    <div class="label">Score</div>
     ${verdict.word === 'NOT SCORED' ? '' : `<div class="score"><span class="n">${r.score}</span><span class="of">/ 100</span></div>`}
     <div class="stamp ${verdict.cls}">${esc(verdict.word)}</div>
     ${loginWall ? loginLine(r) : ''}
     <div class="cov">${loginWall ? `Login setup checked · ${items.filter((x) => BEHIND.has(x.check)).length} checks behind the login` : `${r.coverage.checksRun < r.coverage.checksTotal && !r.notScored ? 'Partial score: ' : ''}${r.coverage.checksRun} of ${r.coverage.checksTotal} checks · ${r.coverage.toolsRun} of ${r.coverage.toolsTotal} tools run`}</div>
     ${r.notScored ? `<p class="note">${notScoredHtml(r.notScored)}</p>` : ''}
     ${capNote(r)}
+  </div>
+  <div class="fields">
+    ${fields.map(([k, v]) => `<div class="f"><div class="label">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join('\n    ')}
   </div>
 </section>
 
@@ -130,7 +132,7 @@ function itemRow(c: CheckResult, code: string, word?: string): string {
   const status = c.status;
   const lead = c.findings.find((f) => f.status === status) ?? c.findings[0];
   const notTested = status === 'skip';
-  return `<details class="row ${status}">
+  return `<details class="row ${status}" id="${code}">
     <summary>${mark(status)}<span class="code">${code}</span><span class="name">${esc(c.title)}</span><span class="lead">${lead ? findingText(lead, 140) : ''}</span><span class="st">${word ?? statusWord(status)}</span><svg class="chev" aria-hidden="true"><use href="#chev"/></svg></summary>
     <div class="body">${notTested ? `<p class="why">${esc(lead?.message ?? 'This check could not run on this server, so it is not counted either way.')}</p>` : ''}
       ${c.findings
@@ -139,6 +141,25 @@ function itemRow(c: CheckResult, code: string, word?: string): string {
         .join('\n      ')}
     </div>
   </details>`;
+}
+
+// ---------- the questions before the score ----------
+
+const FLAG_MARK = { good: 'pass', bad: 'warn', none: 'skip' } as const;
+const FLAG_SHOW = 3; // evidence lines per question; the rest are in the test item it links to
+
+function flagsHtml(f: Flags, codeOf: (checkId: string) => string | undefined): string {
+  const row = (x: Flag) => {
+    const codes = [...new Set(x.evidence.map((e) => (e.check ? codeOf(e.check) : undefined)).filter(Boolean))] as string[];
+    const shown = x.evidence.slice(0, FLAG_SHOW);
+    const more = x.evidence.length - shown.length;
+    const lines = shown.map((e) => `<p>${findingText({ status: 'pass', message: e.text, tool: e.tool }, 220)}</p>`).join('');
+    const links = codes.map((c) => `<a class="code" href="#${c}">${c}</a>`).join(' ');
+    return `<div class="flag ${x.tone}"><div class="fq">${esc(x.question)}</div><div class="fa">${mark(FLAG_MARK[x.tone])}<span>${esc(x.answer)}</span></div><div class="fe">${lines}${more > 0 ? `<p class="fm">and ${more} more</p>` : ''}${links ? `<p class="fl">See ${links}</p>` : ''}</div></div>`;
+  };
+  return `<div class="flags" aria-label="First answers">
+    ${[f.wrongTool, f.readOnly, f.noLogin, f.toolsRun].map(row).join('\n    ')}
+  </div>`;
 }
 
 // ---------- login wall ----------
@@ -350,13 +371,22 @@ em{font-style:normal;font-size:.9em;color:var(--ink)}
 .again{margin-left:auto;text-decoration:none;font-size:15px;border:1px solid var(--rose);padding:8px 16px;border-radius:8px;transition:background .2s}
 .again:hover{background:#B9838A22}
 main{max-width:1312px;margin:0 auto;padding:36px 32px 64px}
-.cert{display:grid;grid-template-columns:1fr minmax(280px,330px);grid-template-areas:"head result" "fields result";background:var(--sheet);border:1px solid var(--rule);border-radius:14px}
-.head{grid-area:head;padding:28px 32px 0}
-.fields{grid-area:fields;padding:22px 32px 28px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px 32px}
+.cert{display:flex;flex-direction:column;background:var(--sheet);border:1px solid var(--rule);border-radius:14px}
+.head{padding:28px 32px 0}
+.flags{margin:22px 32px 0;border-top:1px solid var(--rule)}
+.flag{display:grid;grid-template-columns:minmax(200px,1.1fr) minmax(150px,190px) minmax(0,2fr);gap:8px 24px;align-items:start;padding:14px 0;border-bottom:1px solid var(--rule)}
+.fq{font-weight:700;font-size:15.5px;line-height:1.4}
+.fa{display:flex;gap:8px;align-items:center;font:700 17px/1.3 "Archivo Narrow","Arial Narrow",sans-serif;letter-spacing:.02em}
+.flag.bad .fa{color:var(--rose)}.flag.good .fa{color:var(--pass)}.flag.none .fa{color:var(--soft)}
+.fe p{font-size:14.5px;line-height:1.45;color:var(--soft);overflow-wrap:anywhere}.fe p+p{margin-top:4px}
+.fe .fl a{color:var(--faint)}
+.fields{padding:22px 32px 28px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px 32px;border-top:1px solid var(--rule)}
 h1{font:700 clamp(24px,2.6vw,32px)/1.15 "Archivo Narrow","Arial Narrow",sans-serif;letter-spacing:-.01em;text-wrap:balance}
 .addr{display:block;margin-top:8px;font:400 14px/1.4 var(--mono);color:var(--soft);word-break:break-all}
 .f .v{margin-top:8px;font-size:15.5px;overflow-wrap:anywhere}
-.result{grid-area:result;border-left:1px solid var(--rule);padding:28px 32px;display:flex;flex-direction:column;gap:12px}
+.result{padding:22px 32px 24px;display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px}
+.result .label{flex-basis:100%}
+.result .note{max-width:60ch}
 .score{display:flex;align-items:baseline;gap:14px}
 .score .n{font:600 clamp(64px,7vw,88px)/.9 var(--mono);letter-spacing:-.04em;font-variant-numeric:tabular-nums}
 .score .of{font:400 18px/1 var(--mono);color:var(--soft)}
@@ -416,11 +446,12 @@ footer{margin-top:56px;padding-top:24px;border-top:1px solid var(--rule);display
 @media (max-width:900px){
  .top{padding:0 16px;gap:16px}.top nav{display:none}
  main{padding:24px 16px 48px}
- .cert{grid-template-columns:1fr;grid-template-areas:"head" "result" "fields"}
  .head{padding:22px 20px 0}
- .fields{grid-template-columns:1fr 1fr;padding:20px;gap:18px 20px;border-top:1px solid var(--rule)}
- .result{border-left:none;padding:22px 20px;display:grid;grid-template-columns:auto 1fr;align-items:center;column-gap:20px}
- .result .label{grid-column:1/-1}.result .cov,.result .note{grid-column:1/-1}
+ .flags{margin:18px 20px 0}
+ .flag{grid-template-columns:1fr auto;gap:6px 16px}
+ .flag .fe{grid-column:1/-1}
+ .fields{grid-template-columns:1fr 1fr;padding:20px;gap:18px 20px}
+ .result{padding:20px}
  .cols{grid-template-columns:1fr;gap:28px}
  .item{grid-template-columns:22px 54px 1fr}
  summary{grid-template-columns:22px 1fr 18px;row-gap:4px}

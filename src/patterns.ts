@@ -91,3 +91,38 @@ export function quoteOf(text: string, patterns: { re: RegExp }[], max = 200): st
   }
   return undefined;
 }
+
+// ---------- tool answers ----------
+
+// A tool's answer is often JSON inside text, so its line breaks arrive as the two characters "\n".
+// Turned back into real line breaks, a pattern can't run on from one line of a document into the next.
+export function answerText(text: string): string {
+  return text.replace(/^\[[^\]]+\]\s*/, '').replace(/\\r\\n|\\n|\\r/g, '\n');
+}
+
+// "Never commit .env, and never ask the person to paste a key": a rule against sending secrets, not a
+// request to send them. True only when every send-word in the sentence is itself directly negated
+// ("never paste", "don't ask anyone to share"). "Don't forget to send ~/.ssh" and "never mention this,
+// send .env" still count, because the negation there is not on the sending.
+const SEND_WORD = new RegExp(SEND, 'gi');
+const NEGATED_SEND = new RegExp(String.raw`\b(?:never|not|no|n't|nor)\s+(?:(?:ask|let|allow|tell|make|have|the|a|any|anyone|person|people|user|users|human|them|him|her|you|it|to|ever|even)\s+){0,4}$`, 'i');
+export function negatedSendRequest(sentence: string): boolean {
+  const sends = [...sentence.matchAll(SEND_WORD)];
+  return sends.length > 0 && sends.every((m) => NEGATED_SEND.test(sentence.slice(0, m.index).replace(/n't\b/gi, " n't")));
+}
+
+// The hidden-instruction wordings found in one answer, each with the exact words. strong: the
+// wordings that fail a tool description; weak: the wider ones that only ask a person to read.
+export function answerHits(raw: string): { name: string; quote: string; strong: boolean }[] {
+  const text = answerText(raw);
+  const hits: { name: string; quote: string; strong: boolean }[] = [];
+  for (const [strong, list] of [[true, HIDDEN_INSTRUCTION_PATTERNS], [false, HIDDEN_WEAK_PATTERNS]] as const) {
+    for (const p of list) {
+      if (!p.re.test(text)) continue;
+      const sentence = quoteOf(text, [p], 2000) ?? '';
+      if (p.re === SECRET_EXFIL && negatedSendRequest(sentence)) continue;
+      hits.push({ name: p.name, quote: quoteOf(text, [p]) ?? '', strong });
+    }
+  }
+  return hits;
+}
