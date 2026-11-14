@@ -71,3 +71,13 @@ test('drift: the changes appear in the pull-request summary and the report page,
   assert.match(html, /Tools changed since 2026-10-20/);
   assert.ok(!html.includes('<b>old</b>'), 'server text is escaped');
 });
+
+test('drift: inputs moved into "one of these shapes" (oneOf) are not removed', () => {
+  const flat = { name: 'run', description: 'Runs it.', inputSchema: { type: 'object', properties: { script: { type: 'string' }, runId: { type: 'string' } } } };
+  const shapes = { name: 'run', description: 'Runs it.', inputSchema: { type: 'object', oneOf: [
+    { type: 'object', properties: { script: { type: 'string' } }, required: ['script'] },
+    { type: 'object', properties: { runId: { type: 'string' } }, required: ['runId'] },
+  ] } };
+  const said = diffTools([flat], [shapes]).flatMap((c) => c.what).join(' | ');
+  assert.ok(!/removed|now required/.test(said), said);
+});

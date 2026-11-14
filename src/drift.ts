@@ -34,8 +34,20 @@ export const toToolDef = (t: { name: string; description?: string; inputSchema?:
 });
 
 type Props = Record<string, { type?: unknown; description?: unknown } & Record<string, unknown>>;
-const props = (s: unknown): Props => ((s as any)?.properties && typeof (s as any).properties === 'object' ? (s as any).properties : {});
-const required = (s: unknown): Set<string> => new Set(Array.isArray((s as any)?.required) ? (s as any).required.map(String) : []);
+// Inputs can also sit in "one of these shapes" branches (oneOf/anyOf/allOf), so moving them there isn't a removal.
+const branches = (s: unknown): unknown[] => ['oneOf', 'anyOf', 'allOf'].flatMap((k) => (Array.isArray((s as any)?.[k]) ? (s as any)[k] : []));
+const ownProps = (s: unknown): Props => ((s as any)?.properties && typeof (s as any).properties === 'object' ? (s as any).properties : {});
+const props = (s: unknown): Props => Object.assign({}, ...branches(s).map(ownProps).reverse(), ownProps(s));
+const ownRequired = (s: unknown): string[] => (Array.isArray((s as any)?.required) ? (s as any).required.map(String) : []);
+// Required everywhere: at the top, in every allOf part, or in every oneOf/anyOf shape.
+const required = (s: unknown): Set<string> => {
+  const out = new Set([...ownRequired(s), ...(Array.isArray((s as any)?.allOf) ? (s as any).allOf.flatMap(ownRequired) : [])]);
+  for (const k of ['oneOf', 'anyOf']) {
+    const shapes: unknown[] = Array.isArray((s as any)?.[k]) ? (s as any)[k] : [];
+    if (shapes.length) for (const r of ownRequired(shapes[0])) if (shapes.every((x) => ownRequired(x).includes(r))) out.add(r);
+  }
+  return out;
+};
 const typeOf = (p: unknown) => JSON.stringify((p as any)?.type ?? (p as any)?.anyOf ?? (p as any)?.enum ?? null);
 const words = (text: string | undefined) => new Set(((text ?? '').match(WRITE_VERB_GLOBAL) ?? []).map((w) => w.toLowerCase()));
 const WRITE_VERB_GLOBAL = new RegExp(WRITE_VERB.source, 'gi');
