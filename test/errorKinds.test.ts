@@ -77,6 +77,13 @@ test('only real breakage caps the score; sign-in, slow-down and unclear answers 
   assert.equal(report.coverage.toolsRun, Object.values(CASES).filter(([, s]) => s !== 'skip').length);
 });
 
+test('no bad input sent (no tool takes an input): the check is not scored, even with the HTTP-status warning', () => {
+  assert.ok(!report.calls.some((c) => c.kind === 'bad-input'), 'these tools take no inputs, so no bad input is sent');
+  const c = report.checks.find((x) => x.id === 'bad-input')!;
+  assert.ok(c.findings.some((f) => /HTTP error status/.test(f.message)), 'the warning is still shown');
+  assert.equal(c.status, 'skip', 'but it earns no points either way');
+});
+
 test('nothing unrecognized is ever called a crash', () => {
   const crashed = report.checks.flatMap((c) => c.findings).filter((f) => /Crashed/.test(f.message)).map((f) => f.tool);
   assert.deepEqual([...new Set(crashed)].sort(), ['dropped', 'http500', 'http502']);

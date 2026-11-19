@@ -464,7 +464,10 @@ function badInputCheck(calls: ToolCallRecord[], ran: number): CheckResult {
   }
   const oddErrors = [...new Set(calls.filter((c) => c.note).map((c) => c.tool))];
   if (oddErrors.length) findings.push({ status: 'warn', message: `Errors are sent with an HTTP error status (like 400) instead of a normal MCP reply, so some AI apps may treat them as crashes: ${oddErrors.join(', ')}` });
-  return check('bad-input', 'Bad inputs give a clean error', 10, findings, ran === 0 || findings.every((f) => f.status === 'skip'));
+  // No bad input sent (no tool takes a required or typed input): nothing was tested, so it can't be scored,
+  // even when the warning about HTTP error statuses (from normal calls) is shown.
+  const sent = calls.some((c) => c.kind === 'bad-input');
+  return check('bad-input', 'Bad inputs give a clean error', 10, findings, ran === 0 || !sent || findings.every((f) => f.status === 'skip'));
 }
 
 function speedCheck(connectMs: number, listMs: number, calls: ToolCallRecord[], isProgram = false): CheckResult {
