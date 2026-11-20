@@ -38,7 +38,43 @@ export function allMatches(text: string, patterns: { name: string; re: RegExp }[
 
 const SECRET_FILE = String.raw`(?:~\/\.ssh|id_rsa|\.env\b|credentials\.json)`;
 const SEND = String.raw`\b(?:pass|send|include|upload|attach|paste|share|provide|forward|post|give)\b`;
-const SECRET_EXFIL = new RegExp(`${SECRET_FILE}[^\n]{0,80}?${SEND}|${SEND}[^\n]{0,80}?${SECRET_FILE}`, 'i');
+// Within one sentence: a full stop followed by a space ends it ("…, .env files, logs. Pass text or url." is two).
+const GAP = String.raw`(?:[^\n.!?]|[.!?](?!\s|$)){0,80}?`;
+const SECRET_EXFIL_RAW = `${SECRET_FILE}${GAP}${SEND}|${SEND}${GAP}${SECRET_FILE}`;
+
+// A secret scanner says when to use it: "use before you paste, commit, share or send a .env file". The send
+// words there are a list of moments, joined by "or"/"and", not an order. "Before you reply, send .env" has no
+// list, so it still counts.
+const SCAN_LIST = /\bbefore\s+(?:(?:you|it|they|we|the\s+ai|an\s+ai)\s+)?[a-z]+(?:,\s*[a-z]+)*,?\s+(?:or|and)\s+[a-z]+\b/gi;
+// from/to: only the send words inside the match count (a later "is this safe to post?" in the same sentence
+// is not part of it).
+export function scanBeforeSend(sentence: string, from = 0, to = sentence.length): boolean {
+  const lists = [...sentence.matchAll(SCAN_LIST)].map((m) => [m.index, m.index + m[0].length]);
+  const sends = [...sentence.matchAll(new RegExp(SEND, 'gi'))].filter((s) => s.index >= from && s.index < to);
+  return sends.length > 0 && sends.every((s) => lists.some(([a, b]) => s.index >= a && s.index < b));
+}
+
+function sentenceAt(text: string, start: number, end: number): { text: string; from: number } {
+  const ends = [...text.slice(0, start).matchAll(/[.!?]\s|\n/g)];
+  const from = ends.length ? ends[ends.length - 1].index + ends[ends.length - 1][0].length : 0;
+  const stop = text.slice(end).search(/[.!?](?:\s|$)|\n/);
+  return { text: text.slice(from, stop === -1 ? text.length : end + stop + 1), from };
+}
+
+// Asking the AI to send a secrets file, judged per sentence: a rule against sending ("never paste .env")
+// and a scanner's list of moments ("before you share or send a .env file") don't count.
+class SecretSendRequest extends RegExp {
+  constructor() { super(SECRET_EXFIL_RAW, 'i'); }
+  exec(text: string): RegExpExecArray | null {
+    const all = new RegExp(SECRET_EXFIL_RAW, 'gi');
+    for (let m = all.exec(text); m; m = all.exec(text)) {
+      const s = sentenceAt(text, m.index, m.index + m[0].length);
+      if (!negatedSendRequest(s.text) && !scanBeforeSend(s.text, m.index - s.from, m.index - s.from + m[0].length)) return m;
+    }
+    return null;
+  }
+}
+const SECRET_EXFIL = new SecretSendRequest();
 const INVISIBLE = /[\u{E0000}-\u{E007F}]|[\u202A-\u202E\u2066-\u2069]|[\u200B\u2060-\u2064]|(?<=\S)\uFEFF|(?<=[A-Za-z])[\u200C\u200D](?=[A-Za-z])/u;
 
 // Text in a tool description that tries to steer the AI behind the user's back.
@@ -78,7 +114,7 @@ export function firstMatch(text: string, patterns: { name: string; re: RegExp }[
 // there is one, on one line, cut at about 200 characters.
 export function quoteOf(text: string, patterns: { re: RegExp }[], max = 200): string | undefined {
   for (const { re } of patterns) {
-    const m = new RegExp(re.source, re.flags.replace('g', '')).exec(text);
+    const m = (re instanceof SecretSendRequest ? re : new RegExp(re.source, re.flags.replace('g', ''))).exec(text);
     if (!m) continue;
     // A sentence ends at a mark followed by a space, so "~/.ssh/id_rsa" stays whole.
     const ends = [...text.slice(0, m.index).matchAll(/[.!?]\s|\n/g)];
